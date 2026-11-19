@@ -146,7 +146,11 @@ function updateURL() {
   if (state.greeting) p.set('greet', state.greeting);
   if (!state.lines) p.set('lines', '0');
   if (!state.names) p.set('names', '0');
-  history.replaceState(null, '', `${location.pathname}?${p}`);
+  try {
+    history.replaceState(null, '', `${location.pathname}?${p}`);
+  } catch {
+    // some embedded viewers do not allow changing the address; sharing then uses the default link
+  }
 }
 
 // --- Form -----------------------------------------------------------------------------------
