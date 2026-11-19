@@ -7,10 +7,40 @@
   <meta name="description" content="A Christmas card with the real night sky over your city at midnight, drawn inside a Christmas bauble.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎄</text></svg>">
   <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">{ "imports": { "three": "./vendor/three.min.js" } }</script>
   <script src="vendor/astronomy.browser.min.js"></script>
   <script type="module" src="js/app.js"></script>
 </head>
 <body>
+  <!-- Opening: a flight down a Christmas street up into the stars, then the questions -->
+  <section id="stage" hidden>
+    <canvas id="sky3d" aria-hidden="true"></canvas>
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="stage-lang lang" role="group" aria-label="Language">
+      <button data-lang="tr">TR</button><button data-lang="en">EN</button>
+    </div>
+    <button id="skip" class="skip" type="button"><span data-q="skip">Geç</span> ›</button>
+
+    <div id="welcome" class="screen" hidden>
+      <p id="w-kicker" class="kicker"></p>
+      <h2 id="w-title" class="snowy big"></h2>
+      <p id="w-sub" class="sub"></p>
+      <button id="w-start" type="button" class="primary start"></button>
+    </div>
+
+    <form id="quiz" class="screen" hidden onsubmit="return false">
+      <div class="ornaments" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <h2 id="q-title" class="snowy"></h2>
+      <p id="q-hint" class="sub"></p>
+      <div id="q-body"></div>
+      <div class="q-nav">
+        <button id="q-back" type="button" class="secondary"></button>
+        <button id="q-next" type="button" class="primary"></button>
+      </div>
+    </form>
+  </section>
+
+  <div id="editor" hidden>
   <div class="garland" aria-hidden="true"></div>
   <header>
     <div class="lang" role="group" aria-label="Language">
@@ -57,7 +87,8 @@
 
   <footer>
     <p data-t="credit"></p>
-    <p><a href="https://github.com/sayko89/starry-christmas">GitHub</a> · Safiye Özkan</p>
+    <p><a href="./" id="replay" data-t="replay"></a> · <a href="https://github.com/sayko89/starry-christmas">GitHub</a> · Safiye Özkan</p>
   </footer>
+  </div>
 </body>
 </html>

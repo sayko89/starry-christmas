@@ -1,6 +1,7 @@
 import { zonedTime } from './astro.js';
 import { computeSky, loadData } from './sky.js';
 import { H, W, drawCard, drawLights } from './card.js';
+import { Q, runQuiz } from './quiz.js';
 
 const T = {
   tr: {
@@ -19,6 +20,7 @@ const T = {
     compass: ['K', 'D', 'G', 'B'], ns: ['K', 'G'], ew: ['D', 'B'],
     star: (n, kind) => (kind === 'planet' ? `Gecenin en parlak ışığı: ${n}` : `Gecenin Noel yıldızı: ${n}`),
     credit: 'Yıldız verisi: Hipparcos / d3-celestial · Ay ve gezegenler: astronomy-engine',
+    replay: '✨ Girişi yeniden izle',
   },
   en: {
     title: 'Starry Christmas Card',
@@ -36,6 +38,7 @@ const T = {
     compass: ['N', 'E', 'S', 'W'], ns: ['N', 'S'], ew: ['E', 'W'],
     star: (n, kind) => (kind === 'planet' ? `Brightest light of the night: ${n}` : `Your Christmas star: ${n}`),
     credit: 'Star data: Hipparcos / d3-celestial · Moon and planets: astronomy-engine',
+    replay: '✨ Watch the intro again',
   },
 };
 
@@ -69,12 +72,15 @@ const state = {
   year: +(params.get('year') || 0),
   lines: params.get('lines') !== '0',
   names: params.get('names') !== '0',
+  placeChosen: params.has('place'),
 };
 if (!state.year) state.year = defaultYear(state.occasion);
 
 let catalogue = null;
 let cityIndex = new Map();
 let current = null; // last computed sky
+let editorShown = false;
+let quiz = null;
 
 function t() { return T[state.lang]; }
 
@@ -137,6 +143,7 @@ function loop(time) {
 }
 
 function updateURL() {
+  if (!editorShown) return;
   const p = new URLSearchParams({
     lang: state.lang, place: state.place, lat: state.lat.toFixed(3), lon: state.lon.toFixed(3), tz: state.tz,
     occ: state.occasion, year: state.year,
@@ -165,6 +172,8 @@ function translate() {
   $('message').placeholder = L.defaultMsg[state.occasion];
   $('message').value = state.message ?? L.defaultMsg[state.occasion];
   document.querySelectorAll('.lang button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.lang === state.lang));
+  document.querySelectorAll('[data-q]').forEach((el) => { el.textContent = Q[state.lang][el.dataset.q]; });
+  $('replay').href = `./?lang=${state.lang}`;
 }
 
 function fillForm() {
@@ -185,6 +194,17 @@ function nearestCity(lat, lon) {
     if (d < bestD) { bestD = d; best = c; }
   }
   return best;
+}
+
+function locate(done, fail = () => {}) {
+  if (!navigator.geolocation) return fail(new Error('Geolocation is not available'));
+  navigator.geolocation.getCurrentPosition((pos) => {
+    const { latitude: lat, longitude: lon } = pos.coords;
+    const c = nearestCity(lat, lon);
+    Object.assign(state, { lat, lon, tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      place: c ? `${c[0]}, ${c[1]}` : state.place, placeChosen: 'geo' });
+    done(state.place);
+  }, fail);
 }
 
 function bind() {
@@ -212,11 +232,7 @@ function bind() {
   });
   on('locate', 'click', () => {
     $('status').textContent = t().locating;
-    navigator.geolocation.getCurrentPosition((pos) => {
-      const { latitude: lat, longitude: lon } = pos.coords;
-      const c = nearestCity(lat, lon);
-      Object.assign(state, { lat, lon, tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        place: c ? `${c[0]}, ${c[1]}` : state.place });
+    locate(() => {
       $('city').value = state.place;
       $('status').textContent = '';
       render();
@@ -225,6 +241,7 @@ function bind() {
   document.querySelectorAll('.lang button').forEach((b) => b.addEventListener('click', () => {
     state.lang = b.dataset.lang;
     translate();
+    quiz?.refresh();
     render();
   }));
   on('download', 'click', () => {
@@ -269,9 +286,55 @@ async function start() {
     '400 28px "Playfair Display"', '600 22px Inter', '400 19px Inter'].map((f) => document.fonts.load(f, 'ĞğŞşİıÖöÜüÇç')));
   fillForm();
   bind();
+  if (params.has('place') || params.has('card')) showEditor();
+  else startStage();
+}
+
+function showEditor() {
+  editorShown = true;
+  $('editor').hidden = false;
+  fillForm();
   render();
   document.body.classList.add('ready');
   if (!reduceMotion) requestAnimationFrame(loop);
+}
+
+// The opening: fly down a Christmas street into the stars, then ask four questions.
+async function startStage() {
+  const stage = $('stage');
+  stage.hidden = false;
+  let intro = null;
+  quiz = runQuiz(stage, {
+    lang: () => state.lang,
+    state,
+    cities: cityIndex,
+    year: () => defaultYear('christmas'),
+    defaultMessage: () => t().defaultMsg[state.occasion],
+    locate: (cb) => locate(cb),
+    onDone() {
+      if (!params.get('year')) state.year = defaultYear(state.occasion);
+      showEditor();
+      $('editor').classList.add('arriving');
+      stage.classList.add('leaving');
+      setTimeout(() => { stage.hidden = true; intro?.dispose(); }, 1100);
+      scrollTo(0, 0);
+    },
+  });
+  const skip = $('skip');
+  try {
+    const { createIntro } = await import('./intro.js');
+    intro = createIntro($('sky3d'), { stars: catalogue.stars, reducedMotion: reduceMotion });
+    skip.addEventListener('click', () => intro.skip());
+    intro.onEnd(() => {
+      skip.classList.add('gone');
+      setTimeout(() => quiz.showWelcome(), reduceMotion ? 0 : 400);
+    });
+  } catch (err) {
+    // No WebGL: go straight to the questions over a plain night sky.
+    console.warn('Intro unavailable:', err);
+    skip.classList.add('gone');
+    quiz.showWelcome();
+  }
 }
 
 start();

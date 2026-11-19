@@ -17,6 +17,15 @@
   <img src="assets/card-sydney.jpg" alt="The same card for Sydney, Australia: Orion is upside down, the Southern Cross is near the southern horizon and Sirius is marked as the Christmas star." width="360">
 </p>
 
+<p align="center">
+  <img src="assets/intro.jpg" alt="Three frames of the opening: a 3D Christmas street at night with lit shop windows, strings of lights and a giant tree; the starry sky with the Milky Way and the words 'Bu Noel, ona gökyüzünü hediye et.'; and the question 'Hangi gece?' with two choices." width="100%">
+</p>
+
+The page opens with a short flight: the camera glides down a Christmas street at night — lit shop
+windows, strings of lights across the road, lanterns, a crowd, reindeer made of lights and a giant
+tree — then rises past the star on top of the tree into the sky. One line appears, *"This Christmas,
+give them the sky"*, and four questions follow, each one drifting down letter by letter like snow.
+
 Pick a city, write a name and a message, and the page draws the sky exactly as it will be above that
 city at **00:00 on Christmas night** (or on New Year's Eve): 5,000 stars with their real colours, the
 constellations, the Milky Way, the Moon in its correct phase and the planets. The brightest star or
@@ -34,6 +43,7 @@ that recreates it.
 | **The bauble** | A glass Christmas ornament with a gold rim (with degree ticks and compass points), a gold cap, a red ribbon and bow, and holly. |
 | **The lights** | A garland of bulbs across the top that twinkles in the preview (and stays still for people who prefer reduced motion). |
 | **Your words** | Greeting, name and message; city, date, time and coordinates underneath. Turkish and English. |
+| **The opening** | A 3D scene built entirely from code with [three.js](https://threejs.org) — no models or images. Thousands of bulbs are drawn as glowing points, so it runs on phones. The sky at the end uses the same star catalogue, aimed at the winter hexagon (Orion, Sirius, Gemini, Auriga), with the Milky Way along the real galactic equator. *Skip* jumps ahead; with reduced motion turned on, the flight is skipped. |
 | **Sharing** | *Download PNG* (1200 × 1800, ready to print at 4 × 6 in) and *Copy link* — every setting lives in the URL. |
 
 <p align="center">
@@ -89,12 +99,15 @@ width.
 | [`js/astro.js`](js/astro.js) | Time zones, sidereal time, precession, alt/az, projection, star colours |
 | [`js/sky.js`](js/sky.js) | Turns the catalogues into what is visible from one place at one moment |
 | [`js/card.js`](js/card.js) | Draws the card on a canvas: lights, bauble, sky, text, snow and trees |
-| [`js/app.js`](js/app.js) | Form, Turkish/English text, URL sharing, PNG download, twinkling |
+| [`js/intro.js`](js/intro.js) | The opening: Christmas street, tree, snow, and the camera rising into the stars (three.js) |
+| [`js/quiz.js`](js/quiz.js) | Welcome line and the four questions, with letters falling like snow |
+| [`js/app.js`](js/app.js) | Flow from the opening to the card, form, Turkish/English text, URL sharing, PNG download |
 | [`tools/build_data.py`](tools/build_data.py) | Builds the small JSON files in `data/` from the open source catalogues |
 | [`tests/`](tests) | Astronomy tests (`node --test`) |
 
-Plain HTML, CSS and JavaScript modules — no framework and no build step. The whole page is under 1 MB,
-including the star data and fonts.
+Plain HTML, CSS and JavaScript modules — no framework and no build step. A shared link opens the
+finished card directly, without the opening. The whole page, with the 3D
+scene, star data and fonts, is about 1.6 MB (around 400 KB compressed).
 
 <br>
 
@@ -133,7 +146,8 @@ python3 tools/build_data.py path/to/d3-celestial/data path/to/city-timezones/dat
 
 Star positions from the Hipparcos catalogue via [d3-celestial](https://github.com/ofrohn/d3-celestial)
 (BSD), cities from [city-timezones](https://github.com/kevinroberts/city-timezones) (MIT), Moon and
-planets from [Astronomy Engine](https://github.com/cosinekitty/astronomy) (MIT), fonts Great Vibes,
+planets from [Astronomy Engine](https://github.com/cosinekitty/astronomy) (MIT), 3D with
+[three.js](https://threejs.org) (MIT), fonts Great Vibes,
 Playfair Display and Inter (SIL OFL). Details in [THIRD_PARTY.md](THIRD_PARTY.md). Code: MIT.
 
 <p align="center"><sub>Starry Christmas · Safiye Özkan · 2026</sub></p>

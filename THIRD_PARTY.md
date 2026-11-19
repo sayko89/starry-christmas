@@ -31,6 +31,17 @@ by Kevin Roberts, MIT License. Nine Turkish provinces missing from that list wer
 `vendor/astronomy.browser.min.js` is [Astronomy Engine](https://github.com/cosinekitty/astronomy)
 by Don Cross, MIT License (the full licence text is at the top of the file).
 
+## 3D — three.js
+
+`vendor/three.min.js` is [three.js](https://github.com/mrdoob/three.js) r187 (MIT License,
+Copyright © 2010-2026 three.js authors), bundled and minified with only the classes the opening
+scene uses:
+
+```bash
+echo "export { AdditiveBlending, ..., WebGLRenderer } from 'three';" > entry.js
+npx esbuild entry.js --bundle --minify --format=esm --legal-comments=inline --outfile=vendor/three.min.js
+```
+
 ## Fonts
 
 Great Vibes, Playfair Display and Inter, from [Fontsource](https://fontsource.org), all under the
