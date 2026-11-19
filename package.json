@@ -1,0 +1,14 @@
+{
+  "name": "starry-christmas",
+  "version": "1.0.0",
+  "description": "A Christmas card with the real night sky over your city at midnight",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "astronomy-engine": "^2.1.19"
+  },
+  "license": "MIT"
+}
