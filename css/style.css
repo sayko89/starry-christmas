@@ -354,3 +354,37 @@ footer a { color: var(--gold); }
 .f-actions button { padding: 9px 18px; font-size: 13px; }
 #stage #finale { gap: 6px; }
 .finale-shade { background: linear-gradient(180deg, transparent 62%, rgba(5,10,22,.55) 78%, rgba(5,10,22,.88) 100%); }
+
+/* the numbers behind the picture */
+#sky-info {
+  position: absolute; z-index: 2; top: 14px; left: 14px; max-width: min(430px, 64%);
+  padding: 8px 11px; border-radius: 10px; background: rgba(5,10,22,.42); backdrop-filter: blur(6px);
+  border: 1px solid rgba(232,192,99,.18); opacity: 0; transition: opacity 1.4s ease; pointer-events: none;
+}
+#stage.info-on #sky-info { opacity: 1; }
+#sky-info p { margin: 0; font: 400 11.5px/1.5 Inter, sans-serif; color: rgba(246,239,225,.75); }
+#sky-info p.lead { color: var(--gold); font-weight: 600; }
+#stage.editing #sky-info { opacity: 0; }
+.ghost { border-color: rgba(246,239,225,.3) !important; color: rgba(246,239,225,.8) !important; }
+
+/* words can be hidden to look at the sky alone */
+#stage.words-hidden .f-text, #stage.words-hidden #finale .credit { opacity: 0 !important; visibility: hidden; }
+#stage.words-hidden .finale-shade { opacity: 0; }
+
+.sky-label.compass { font: 700 12px Inter, sans-serif; letter-spacing: .12em; color: var(--gold); padding: 0; margin-top: -8px; translate: -50% 0; }
+.sky-label.compass::before { display: none; }
+
+@media (max-width: 700px) {
+  #finale .snowy.big { font-size: 40px; }
+  .f-name { font-size: 19px; }
+  .f-message { font-size: 14px; }
+  .f-place { font-size: 11px; letter-spacing: .22em; }
+  .f-when { font-size: 10px; letter-spacing: .08em; }
+  .f-star { font-size: 14px; }
+  #finale .credit { display: none; }
+  .f-actions { gap: 6px; }
+  .f-actions button { padding: 8px 12px; font-size: 12px; }
+  #sky-info { max-width: calc(100% - 120px); padding: 6px 9px; }
+  #sky-info p { font-size: 10px; }
+  .finale-shade { background: linear-gradient(180deg, transparent 58%, rgba(5,10,22,.55) 74%, rgba(5,10,22,.9) 100%); }
+}

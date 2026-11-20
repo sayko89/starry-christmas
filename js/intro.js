@@ -791,21 +791,22 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
   const fadeUniform = { value: 1 };
   const timeUniform = { value: 0 };
   const pixelUniform = { value: renderer.getPixelRatio() };
+  const gainUniform = { value: 1 };   // a little more light for faint stars on small screens
   // Each star is a point sprite with a sharp core and a faint halo; brightness follows its magnitude,
   // stars near the horizon are dimmed and reddened by the air and twinkle more.
   const starMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
-    uniforms: { uFade: fadeUniform, uTime: timeUniform, uPixel: pixelUniform },
+    uniforms: { uFade: fadeUniform, uTime: timeUniform, uPixel: pixelUniform, uGain: gainUniform },
     vertexShader: `
       attribute float size; attribute float bright; attribute float seed; attribute float alt;
-      uniform float uTime; uniform float uPixel;
+      uniform float uTime; uniform float uPixel; uniform float uGain;
       varying vec3 vColor; varying float vBright;
       void main() {
         float low = 1.0 - clamp(alt / 50.0, 0.0, 1.0);
         float tw = 1.0 + (0.08 + 0.32 * low) * sin(uTime * (3.0 + seed * 9.0) + seed * 40.0);
         float ext = smoothstep(-0.5, 9.0, alt);
         vColor = mix(color, color * vec3(1.0, 0.82, 0.62), low * low);
-        vBright = bright * ext * tw;
+        vBright = min(2.0, bright * uGain + (uGain - 1.0) * 0.06) * ext * tw;
         gl_PointSize = size * uPixel * (0.9 + 0.1 * tw);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
@@ -820,6 +821,26 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
     vertexColors: true,
   });
   const lineMat = new THREE.LineBasicMaterial({ color: '#e8c063', transparent: true, opacity: 0, depthWrite: false, fog: false });
+  // a faint altitude/azimuth grid, like a planetarium's, so the sky reads as measured
+  const gridMat = new THREE.LineBasicMaterial({ color: '#9fb6dd', transparent: true, opacity: 0, depthWrite: false, fog: false });
+  {
+    const seg = [];
+    for (const alt of [0, 30, 60]) {
+      for (let az = 0; az < 360; az += 3) {
+        const a = hv(alt, az, SKY_R - 12), b = hv(alt, az + 3, SKY_R - 12);
+        seg.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      }
+    }
+    for (let az = 0; az < 360; az += 45) {
+      for (let alt = 0; alt < 84; alt += 3) {
+        const a = hv(alt, az, SKY_R - 12), b = hv(alt + 3, az, SKY_R - 12);
+        seg.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3));
+    sky.add(new THREE.LineSegments(g, gridMat));
+  }
   const markMat = new THREE.SpriteMaterial({ map: sparkleTexture(), transparent: true, depthWrite: false, opacity: 0,
     blending: THREE.AdditiveBlending, fog: false, sizeAttenuation: false, color: '#ffe6a0' });
   const mark = new THREE.Sprite(markMat);
@@ -903,7 +924,7 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
    * Put a sky (from sky.js: everything in altitude/azimuth) on the dome.
    * names: { moon, lang } for the labels. With fade, the old stars fade out and the new ones in.
    */
-  function setSky(s, { lang = 'tr', moonName = 'Ay', starLabel = (n) => n, fade = true } = {}) {
+  function setSky(s, { lang = 'tr', moonName = 'Ay', starLabel = (n) => n, compass = null, fade = true } = {}) {
     const build = () => {
       for (const c of [...skyContent.children]) {
         skyContent.remove(c);
@@ -996,6 +1017,7 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
         if (!st.name || st.mag > 1.7 || st.alt < 4 || (s.brightest && s.brightest.name === st.name)) continue;
         anchors.push({ dir: hv(st.alt, st.az), text: st.name, kind: 'star', order: 3 + st.mag / 10 });
       }
+      if (compass) compass.forEach((name, i) => anchors.push({ dir: hv(2.5, i * 45), text: name, kind: 'compass', order: 0.5 }));
       for (const c of s.labels) {
         if (c.rank > 2 || c.alt < 8) continue;
         anchors.push({ dir: hv(c.alt, c.az), text: (lang === 'tr' ? c.tr : c.en).toLocaleUpperCase(lang), kind: 'const', order: 5 + c.rank });
@@ -1017,7 +1039,7 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
   const labelLayer = labelRoot;
   let labelNodes = [];
   const tmpV = new THREE.Vector3();
-  const CHAR = { xmas: 10, moon: 9, planet: 9, star: 8, const: 8.5 };
+  const CHAR = { xmas: 10, moon: 9, planet: 9, star: 8, const: 8.5, compass: 9 };
 
   /** Lay out the labels for a camera and viewport; skips ones off-screen or overlapping. */
   function layoutLabels(cam, w, h, maxY = 0.62) {
@@ -1028,10 +1050,11 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
       tmpV.copy(a.dir).multiplyScalar(SKY_R).add(cam.position).project(cam);
       if (tmpV.z > 1) continue;
       const x = (tmpV.x * 0.5 + 0.5) * w, y = (-tmpV.y * 0.5 + 0.5) * h;
-      if (x < 20 || x > w - 20 || y < 70 || y > h * maxY) continue;
+      if (x < 20 || x > w - 20 || y < 70 || y > h * (a.kind === 'compass' ? maxY + 0.04 : maxY)) continue;
       const tw = a.text.length * CHAR[a.kind] * scale + 24, th = 22 * scale;
-      const box = a.kind === 'const' ? [x - tw / 2, y - th / 2, tw, th] : [x + 6, y - th - 4, tw, th];
-      if (box[0] + box[2] > w - 8) { if (a.kind === 'const') continue; box[0] = x - 6 - tw; }
+      const centred = a.kind === 'const' || a.kind === 'compass';
+      const box = centred ? [x - tw / 2, y - th / 2, tw, th] : [x + 6, y - th - 4, tw, th];
+      if (box[0] + box[2] > w - 8) { if (centred) continue; box[0] = x - 6 - tw; }
       if (placed.some((b) => box[0] < b[0] + b[2] && box[0] + box[2] > b[0] && box[1] < b[1] + b[3] && box[1] + box[3] > b[1])) continue;
       placed.push(box);
       placed.push([x - 7, y - 7, 14, 14]); // keep other labels off the star itself
@@ -1182,6 +1205,7 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
     const want = marks.shown ? 1 : 0;
     marks.level += (want - marks.level) * Math.min(1, dt * 1.5);
     lineMat.opacity = marks.lines ? 0.2 * marks.level : 0;
+    gridMat.opacity = marks.lines ? 0.09 * marks.level : 0;
     markMat.opacity = 0.95 * marks.level;
     if (moonSprite && moonLimb) {
       // turn the Moon so its lit side faces the Sun as seen on screen
@@ -1227,6 +1251,7 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
     wideFov(aspect) { return aspect < 1 ? 92 : 80; },
     /** Show or hide the constellation lines, names and the Christmas-star mark. */
     setMarks(opts) { Object.assign(marks, opts); },
+    setGain(g) { gainUniform.value = g; },
     /** Render a still at w × h and return it with the labels laid out for that frame. */
     snapshot(w, h) {
       const pr = renderer.getPixelRatio(), aspect = camera.aspect, fov = camera.fov;

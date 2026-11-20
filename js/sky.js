@@ -126,5 +126,18 @@ export function computeSky({ date, lat, lon }, catalogue = data, Astronomy = glo
     }
   }
 
-  return { stars, deep, lines, labels, milkyway, planets, moon, sun, brightest, lat, lst: lst(date, lon) };
+  // galactic latitude of a direction in this sky, for framing the view on the Milky Way
+  const theta = lst(date, lon) * Math.PI / 180, phi = lat * Math.PI / 180;
+  const galLat = (alt, az) => {
+    const a = alt * Math.PI / 180, z = az * Math.PI / 180;
+    const dec = Math.asin(Math.sin(phi) * Math.sin(a) + Math.cos(phi) * Math.cos(a) * Math.cos(z));
+    const H = Math.atan2(-Math.sin(z) * Math.cos(a), Math.cos(phi) * Math.sin(a) - Math.sin(phi) * Math.cos(a) * Math.cos(z));
+    const ra = theta - H;
+    const e = [Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), Math.sin(dec)];
+    const gz = GAL[2][0] * e[0] + GAL[2][1] * e[1] + GAL[2][2] * e[2];
+    return Math.asin(Math.max(-1, Math.min(1, gz))) * 180 / Math.PI;
+  };
+
+  return { stars, deep, lines, labels, milkyway, planets, moon, sun, brightest, lat, lst: lst(date, lon), galLat,
+    visibleCount: deep.filter((d) => d.alt > 0).length, nakedEye: deep.filter((d) => d.alt > 0 && d.mag <= 6).length };
 }

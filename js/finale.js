@@ -45,6 +45,7 @@ const LABEL_STYLE = {
   planet: ['italic 700 21px "Playfair Display"', GOLD],
   star: ['italic 400 20px "Playfair Display"', 'rgba(246,239,225,0.88)'],
   const: ['600 14px Inter', 'rgba(246,239,225,0.5)'],
+  compass: ['700 18px Inter', GOLD],
 };
 
 function drawLabels(ctx, labels) {
@@ -56,7 +57,7 @@ function drawLabels(ctx, labels) {
     const [font, color] = LABEL_STYLE[l.kind];
     ctx.font = font;
     ctx.fillStyle = color;
-    if (l.kind === 'const') {
+    if (l.kind === 'const' || l.kind === 'compass') {
       letterSpaced(ctx, l.text, l.x, l.y, 3);
       continue;
     }
@@ -89,6 +90,20 @@ function roundRect(ctx, x, y, w, h, r) {
 /** Draw labels, words and border onto a W × H still. t: {greeting, name, message, place, when, star, lang} */
 export function drawFinale(ctx, W, H, labels, t) {
   drawLabels(ctx, labels);
+  // the data behind the picture, top left
+  if (t.info && t.info.length) {
+    ctx.save();
+    ctx.font = '400 17px Inter';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = 6;
+    t.info.forEach((line, i) => {
+      ctx.fillStyle = i === 0 ? 'rgba(232,192,99,0.9)' : 'rgba(246,239,225,0.72)';
+      ctx.fillText(line, 64, 80 + i * 26);
+    });
+    ctx.restore();
+  }
 
   // dark fade at the bottom so the words read clearly
   const top = H * 0.6;

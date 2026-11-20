@@ -16,6 +16,16 @@ const T = {
       newyear: 'Yeni yılın ilk anında başımızın üstündeki gökyüzü.',
     },
     ns: ['K', 'G'], ew: ['D', 'B'], moon: 'Ay',
+    compass: ['K', 'KD', 'D', 'GD', 'G', 'GB', 'B', 'KB'],
+    dirs: ['kuzey', 'kuzeydoğu', 'doğu', 'güneydoğu', 'güney', 'güneybatı', 'batı', 'kuzeybatı'],
+    info: (x) => [
+      `${x.visible} yıldız şu an ufkun üstünde · ${x.naked} tanesi çıplak gözle görülür`,
+      `Katalog: HYG, 61.816 yıldız · Samanyolu: Gaia EDR3`,
+      x.moon ? `Ay: %${x.moon.lit} aydınlık · ${x.moon.alt}° yükseklikte, ${x.moon.dir}` : 'Ay şu an ufkun altında',
+      x.star ? `${x.star.name}: ${x.star.mag} kadir · ${x.star.alt}° yükseklikte, ${x.star.dir}` : '',
+      `Bakış: ${x.view.dir} · ${x.view.alt}° yukarı`,
+    ].filter(Boolean),
+    hideWords: 'Yazıları gizle', showWords: 'Yazıları göster',
     starLabel: (n) => `✦ ${n}`,
     star: (n, kind) => (kind === 'planet' ? `Gecenin en parlak ışığı: ${n}` : `Gecenin Noel yıldızı: ${n}`),
     credit: 'Yıldızlar: HYG (Hipparcos, Yale, Gliese) · Samanyolu: Gaia EDR3, Kevinmloch (CC BY-SA) · Ay ve gezegenler: astronomy-engine',
@@ -33,6 +43,16 @@ const T = {
       newyear: 'The sky above us in the first moment of the new year.',
     },
     ns: ['N', 'S'], ew: ['E', 'W'], moon: 'Moon',
+    compass: ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'],
+    dirs: ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'],
+    info: (x) => [
+      `${x.visible} stars above the horizon right now · ${x.naked} visible to the naked eye`,
+      `Catalogue: HYG, 61,816 stars · Milky Way: Gaia EDR3`,
+      x.moon ? `Moon: ${x.moon.lit}% lit · ${x.moon.alt}° up, ${x.moon.dir}` : 'The Moon is below the horizon',
+      x.star ? `${x.star.name}: magnitude ${x.star.mag} · ${x.star.alt}° up, ${x.star.dir}` : '',
+      `Looking ${x.view.dir} · ${x.view.alt}° up`,
+    ].filter(Boolean),
+    hideWords: 'Hide words', showWords: 'Show words',
     starLabel: (n) => `✦ ${n}`,
     star: (n, kind) => (kind === 'planet' ? `Brightest light of the night: ${n}` : `Your Christmas star: ${n}`),
     credit: 'Stars: HYG (Hipparcos, Yale, Gliese) · Milky Way: Gaia EDR3, Kevinmloch (CC BY-SA) · Moon and planets: astronomy-engine',
@@ -108,36 +128,97 @@ function cardText() {
 }
 
 /**
- * Where to point the camera: the Christmas star and the Moon together when both fit in the wide
- * view, otherwise the Christmas star (or the Moon, or the celestial equator). Returns the azimuth and
- * the camera's pitch, chosen so they sit in the upper part of the screen, above the words.
+ * Where to point the camera. Every direction (azimuth every 6°, pitch every 4°) is scored on what
+ * would show in the sky above the words: the Christmas star (required), the Moon, and how much of
+ * the Milky Way. The best one wins. Returns the azimuth and the camera's pitch.
  */
 function viewTarget(s) {
   const D = Math.PI / 180;
   const aspect = innerWidth / innerHeight;
-  const v = intro ? intro.wideFov(aspect) : 80;
-  const h = (2 * Math.atan(Math.tan((v / 2) * D) * aspect)) / D;
-  const star = s.brightest && s.brightest.alt > 5 ? s.brightest : null;
-  const moon = s.moon && s.moon.alt > 3 ? s.moon : null;
-  // the usable band of the screen is from 8% to 48% of its height (the words sit below)
-  const pitchFor = (lo, hi) => (lo + hi) / 2 - v * 0.22; // the middle of that band is 22% of the view above centre
-  const fits = (lo, hi) => hi - lo <= v * 0.38;
-  if (star && moon) {
-    const dAz = ((moon.az - star.az + 540) % 360) - 180;
-    const across = Math.abs(dAz) * Math.cos(((moon.alt + star.alt) / 2) * D);
-    const lo = Math.min(moon.alt, star.alt), hi = Math.max(moon.alt, star.alt);
-    if (across < h * 0.75 && fits(lo, hi)) {
-      return { az: (star.az + dAz / 2 + 360) % 360, alt: Math.max(4, Math.min(62, pitchFor(lo, hi))), both: true };
+  const v = (intro ? intro.wideFov(aspect) : 80) * D;
+  const h = 2 * Math.atan(Math.tan(v / 2) * aspect);
+  const tv = Math.tan(v / 2), th = Math.tan(h / 2);
+  const dir = (alt, az) => [Math.cos(alt * D) * Math.sin(az * D), Math.sin(alt * D), -Math.cos(alt * D) * Math.cos(az * D)];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const star = s.brightest && s.brightest.alt > 3 ? dir(s.brightest.alt, s.brightest.az) : null;
+  const moon = s.moon && s.moon.alt > 2 ? dir(s.moon.alt, s.moon.az) : null;
+  const TOP = innerWidth < 700 ? 0.22 : 0.18, BOTTOM = innerWidth < 700 ? 0.56 : 0.54; // between the data panel and the words
+  let best = null;
+  for (let az = 0; az < 360; az += 6) {
+    for (let pitch = 2; pitch <= 64; pitch += 4) {
+      const fwd = dir(pitch, az);
+      const right = [Math.cos(az * D), 0, Math.sin(az * D)];
+      const up = [-Math.sin(pitch * D) * Math.sin(az * D), Math.cos(pitch * D), Math.sin(pitch * D) * Math.cos(az * D)];
+      // where a direction lands on screen: [x 0..1, y 0..1], or null if behind
+      const screen = (d) => {
+        const z = dot(d, fwd);
+        if (z <= 0.05) return null;
+        return [0.5 + dot(d, right) / z / (2 * th), 0.5 - dot(d, up) / z / (2 * tv)];
+      };
+      const inBand = (d, margin = 0.06) => {
+        const p = d && screen(d);
+        return p && p[0] > margin && p[0] < 1 - margin && p[1] > TOP && p[1] < BOTTOM;
+      };
+      if (star && !inBand(star, 0.12)) continue;
+      let score = star ? 100 : 0;
+      if (moon && inBand(moon)) score += 45;
+      // the Milky Way: sample the band of the screen, score points near the galactic plane
+      let mw = 0;
+      for (let gx = 0.08; gx < 1; gx += 0.14) {
+        for (let gy = TOP; gy < BOTTOM; gy += 0.07) {
+          const sx = (gx - 0.5) * 2 * th, sy = (0.5 - gy) * 2 * tv;
+          const d = [fwd[0] + right[0] * sx + up[0] * sy, fwd[1] + right[1] * sx + up[1] * sy, fwd[2] + right[2] * sx + up[2] * sy];
+          const n = Math.hypot(...d);
+          const alt = Math.asin(d[1] / n) / D;
+          if (alt < 5) continue;
+          const az2 = Math.atan2(d[0], -d[2]) / D;
+          const b = s.galLat(alt, az2);
+          mw += Math.exp(-((b / 14) ** 2)) * Math.min(1, alt / 25);
+        }
+      }
+      score += mw * 1.6;
+      // a little horizon at the bottom gives the sky a place
+      if (pitch * D - v / 2 < -2 * D) score += 6;
+      if (!best || score > best.score) best = { score, az, pitch };
     }
   }
-  const o = star || moon;
-  if (o) return { az: o.az, alt: Math.max(4, Math.min(62, pitchFor(o.alt, o.alt))) };
+  if (best) return { az: best.az, alt: best.pitch };
   return { az: s.lat >= 0 ? 180 : 0, alt: 25 };
 }
 
 function skyOptions() {
-  return { lang: state.lang, moonName: t().moon, starLabel: t().starLabel };
+  return { lang: state.lang, moonName: t().moon, starLabel: t().starLabel, compass: t().compass };
 }
+
+let lastView = null;
+
+/** The numbers behind the picture, for the panel in the corner and the PNG. */
+function infoLines() {
+  if (!sky || !lastView) return [];
+  const L = t();
+  const nf = new Intl.NumberFormat(state.lang);
+  const dirOf = (az) => L.dirs[Math.round((((az % 360) + 360) % 360) / 45) % 8];
+  const b = sky.brightest;
+  return L.info({
+    visible: nf.format(sky.visibleCount), naked: nf.format(sky.nakedEye),
+    moon: sky.moon && sky.moon.alt > 0 ? { lit: Math.round(sky.moon.fraction * 100), alt: Math.round(sky.moon.alt), dir: dirOf(sky.moon.az) } : null,
+    star: b ? { name: state.lang === 'tr' ? b.tr : b.name, mag: nf.format(Math.round(b.mag * 10) / 10), alt: Math.round(b.alt), dir: dirOf(b.az) } : null,
+    view: { dir: dirOf(lastView.az), alt: Math.round(lastView.alt) },
+  });
+}
+
+function fillInfo() {
+  const el = $('sky-info');
+  el.textContent = '';
+  infoLines().forEach((line, i) => {
+    const p = document.createElement('p');
+    p.textContent = line;
+    if (i === 0) p.className = 'lead';
+    el.appendChild(p);
+  });
+}
+
+const small = () => innerWidth < 700;
 
 // --- The final sky and the words underneath ---------------------------------------------------------
 
@@ -172,11 +253,16 @@ async function showFinale({ fresh = true } = {}) {
   finale.hidden = true;
   finale.classList.remove('shown');
   intro.setSky(sky, { ...skyOptions(), fade: fresh });
+  intro.setGain(small() ? 1.4 : 1);
   const target = viewTarget(sky);
+  lastView = target;
   await new Promise((r) => setTimeout(r, fresh && !reduceMotion ? 700 : 0));
   await intro.turnTo(target.az, target.alt, fresh ? 5 : 2.5);
-  intro.setMarks({ shown: true });
-  await new Promise((r) => setTimeout(r, reduceMotion ? 0 : 1300));
+  intro.setMarks({ shown: true, maxY: 0.94 });
+  fillInfo();
+  $('stage').classList.add('info-on');
+  // let the sky and its names be seen on their own first, longer on a phone
+  await new Promise((r) => setTimeout(r, reduceMotion ? 0 : small() ? 3800 : 2200));
   fillFinaleText(true);
   finale.hidden = false;
   requestAnimationFrame(() => finale.classList.add('shown'));
@@ -186,6 +272,7 @@ async function showFinale({ fresh = true } = {}) {
 /** Keep the sky's names above the words at the bottom. */
 function fitLabels() {
   if (!intro || $('finale').hidden) return;
+  if ($('stage').classList.contains('words-hidden')) { intro.setMarks({ maxY: 0.94 }); return; }
   const top = $('finale').querySelector('.f-text').getBoundingClientRect().top;
   intro.setMarks({ maxY: Math.max(0.3, (top - 12) / innerHeight) });
 }
@@ -196,8 +283,10 @@ function refreshSky() {
   computeCurrentSky();
   intro.setSky(sky, { ...skyOptions(), fade: true });
   const target = viewTarget(sky);
+  lastView = target;
   intro.turnTo(target.az, target.alt, 3);
   fillFinaleText(false);
+  fillInfo();
   updateURL();
 }
 
@@ -239,6 +328,7 @@ function translate() {
   document.querySelectorAll('.lang button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.lang === state.lang));
   document.querySelectorAll('[data-q]').forEach((el) => { el.textContent = Q[state.lang][el.dataset.q]; });
   $('replay').href = `./?lang=${state.lang}`;
+  $('toggle-words').textContent = $('stage').classList.contains('words-hidden') ? L.showWords : L.hideWords;
 }
 
 function fillForm() {
@@ -277,7 +367,7 @@ const status = (text) => { $('status').textContent = text; };
 function download() {
   const W = 1200, H = 1800;
   const shot = intro.snapshot(W, H);
-  drawFinale(shot.canvas.getContext('2d'), W, H, shot.labels, cardText());
+  drawFinale(shot.canvas.getContext('2d'), W, H, shot.labels, { ...cardText(), info: infoLines() });
   const slug = state.place.split(',')[0].toLocaleLowerCase('tr').normalize('NFKD').replace(/[^a-z0-9]+/g, '-');
   shot.canvas.toBlob((blob) => {
     const a = document.createElement('a');
@@ -322,6 +412,7 @@ function bind() {
     if (finaleShown) {
       intro.setSky(sky, { ...skyOptions(), fade: false });
       refreshWords();
+      fillInfo();
     }
   }));
   on('download', 'click', download);
@@ -338,6 +429,11 @@ function bind() {
     d.hidden = !d.hidden;
     $('stage').classList.toggle('editing', !d.hidden);
     if (!d.hidden) $('name').focus({ preventScroll: true });
+  });
+  on('toggle-words', 'click', () => {
+    const hidden = $('stage').classList.toggle('words-hidden');
+    $('toggle-words').textContent = hidden ? t().showWords : t().hideWords;
+    fitLabels();
   });
   on('drawer-close', 'click', () => { $('drawer').hidden = true; $('stage').classList.remove('editing'); });
 }
