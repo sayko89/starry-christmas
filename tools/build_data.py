@@ -1,6 +1,6 @@
 """Build the small JSON files the card needs from the original open datasets.
 
-    python3 tools/build_data.py <d3-celestial/data> <city-timezones/data/cityMap.json>
+    python3 tools/build_data.py <d3-celestial/data> <city-timezones/data/cityMap.json> [<hygdata_v41.csv>]
 
 Inputs
   d3-celestial  (BSD 3-Clause, Olaf Frohn)  https://github.com/ofrohn/d3-celestial
@@ -10,14 +10,21 @@ Inputs
       constellations.lines.json    stick figures
   city-timezones  (MIT)             https://github.com/kevinroberts/city-timezones
       cityMap.json                 cities with latitude, longitude and IANA time zone
+  HYG database v4.1 (CC BY-SA 4.0, David Nash / astronexus)  https://github.com/astronexus/HYG-Database
+      hyg/CURRENT/hygdata_v41.csv  Hipparcos, Yale Bright Star and Gliese catalogues combined
 
 Outputs (in data/)
   stars.json           [[ra°, dec°, mag, b-v, name?], ...] sorted from brightest
   constellations.json  [{id, en, tr, label:[ra, dec], lines:[[[ra, dec], ...], ...]}, ...]
   cities.json          [[name, country, lat, lon, tz], ...]
+  stars-deep.bin       every HYG star to magnitude 8.5 (~60,000), 6 bytes each, brightest first:
+                       uint16 RA (0..65535 = 0..360°), int16 Dec (±32767 = ±90°),
+                       uint8 magnitude ((mag + 2) × 24), uint8 B-V colour ((ci + 0.5) × 100)
 """
+import csv
 import json
 import os
+import struct
 import sys
 import unicodedata
 
@@ -114,6 +121,37 @@ def build_cities(path, min_pop=250_000):
     return out
 
 
+def build_deep_stars(path, limit=8.5):
+    """Pack the HYG stars down to `limit` into the small binary format described above."""
+    rows = []
+    for r in csv.DictReader(open(path, encoding='utf-8')):
+        if r['id'] == '0':  # the Sun
+            continue
+        try:
+            mag = float(r['mag'])
+        except ValueError:
+            continue
+        if mag > limit:
+            continue
+        try:
+            ci = float(r['ci'])
+        except ValueError:
+            ci = 0.6
+        ra = float(r['ra']) * 15.0  # hours -> degrees
+        dec = float(r['dec'])
+        rows.append((mag, ra, dec, ci))
+    rows.sort()
+    out = bytearray()
+    clamp = lambda v, lo, hi: max(lo, min(hi, v))
+    for mag, ra, dec, ci in rows:
+        out += struct.pack('<HhBB',
+                           int(round((ra % 360) / 360 * 65535)) % 65536,
+                           int(round(clamp(dec, -90, 90) / 90 * 32767)),
+                           int(round(clamp((mag + 2) * 24, 0, 255))),
+                           int(round(clamp((ci + 0.5) * 100, 0, 255))))
+    return bytes(out), len(rows)
+
+
 def write(name, obj):
     path = os.path.join(OUT, name)
     with open(path, 'w', encoding='utf-8') as f:
@@ -121,12 +159,17 @@ def write(name, obj):
     print(f'{name:20} {os.path.getsize(path) // 1024:>5} KB')
 
 
-def main(celestial, cities):
+def main(celestial, cities, hyg=None):
     os.makedirs(OUT, exist_ok=True)
+    if hyg:
+        data, n = build_deep_stars(hyg)
+        with open(os.path.join(OUT, 'stars-deep.bin'), 'wb') as f:
+            f.write(data)
+        print(f'stars-deep.bin       {len(data) // 1024:>5} KB  ({n} stars)')
     write('stars.json', build_stars(celestial))
     write('constellations.json', build_constellations(celestial))
     write('cities.json', build_cities(cities))
 
 
 if __name__ == '__main__':
-    main(*sys.argv[1:3])
+    main(*sys.argv[1:4])

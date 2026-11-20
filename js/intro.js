@@ -743,18 +743,40 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
 
   // --- Sky: real stars on a sphere that follows the camera -----------------------------------------
   const sky = new THREE.Group();
-  const skyDome = new THREE.Mesh(new THREE.SphereGeometry(500, 32, 16), new THREE.ShaderMaterial({
+  // The dome: a night-sky gradient plus the real Milky Way — a picture of the Galaxy made from
+  // Gaia EDR3 (foreground stars removed, in galactic coordinates). For every pixel the shader turns
+  // the direction (altitude/azimuth) into galactic longitude/latitude with uGal and looks it up.
+  const mwTexture = new THREE.TextureLoader().load(new URL('../textures/milky-way.jpg', import.meta.url).href);
+  mwTexture.colorSpace = THREE.SRGBColorSpace;
+  mwTexture.wrapS = THREE.RepeatWrapping;
+  mwTexture.minFilter = THREE.LinearFilter;
+  mwTexture.generateMipmaps = false;
+  const domeUniforms = { uMW: { value: mwTexture }, uGal: { value: new THREE.Matrix3() }, uMWOn: { value: 0 }, uMWGain: { value: 0.8 } };
+  const skyDome = new THREE.Mesh(new THREE.SphereGeometry(500, 64, 32), new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false,
-    uniforms: { },
+    uniforms: domeUniforms,
     vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-    fragmentShader: `varying vec3 vDir; void main(){
-      float h = clamp(vDir.y, -0.2, 1.0);
-      vec3 horizon = vec3(0.075, 0.07, 0.10);
-      vec3 low = vec3(0.025, 0.045, 0.09);
-      vec3 high = vec3(0.006, 0.012, 0.03);
-      vec3 c = mix(horizon, low, smoothstep(0.0, 0.12, h));
-      c = mix(c, high, smoothstep(0.12, 0.8, h));
-      gl_FragColor = vec4(c, 1.0); }`,
+    fragmentShader: `
+      uniform sampler2D uMW; uniform mat3 uGal; uniform float uMWOn; uniform float uMWGain;
+      varying vec3 vDir;
+      void main(){
+        vec3 d = normalize(vDir);
+        float h = clamp(d.y, -0.2, 1.0);
+        vec3 horizon = vec3(0.075, 0.07, 0.10);
+        vec3 low = vec3(0.022, 0.04, 0.08);
+        vec3 high = vec3(0.004, 0.008, 0.022);
+        vec3 c = mix(horizon, low, smoothstep(0.0, 0.12, h));
+        c = mix(c, high, smoothstep(0.12, 0.8, h));
+        // the Milky Way, dimmed by the thicker air near the horizon
+        vec3 g = uGal * d;
+        float l = atan(g.y, g.x);
+        float b = asin(clamp(g.z, -1.0, 1.0));
+        vec2 uv = vec2(fract(0.5 - l / 6.2831853), 0.5 + b / 3.1415927);
+        vec3 mw = texture2D(uMW, uv).rgb;
+        float air = smoothstep(-0.01, 0.35, d.y);
+        c += mw * uMWGain * uMWOn * air;
+        gl_FragColor = vec4(c, 1.0);
+      }`,
   }));
   sky.add(skyDome);
 
@@ -792,16 +814,12 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
       varying vec3 vColor; varying float vBright;
       void main() {
         float d = length(gl_PointCoord - 0.5) * 2.0;
-        float a = exp(-d * d * 14.0) + 0.18 * exp(-d * d * 3.0);
+        float a = exp(-d * d * 16.0) + 0.06 * exp(-d * d * 4.0);
         gl_FragColor = vec4(vColor * vBright * a * uFade, 1.0);
       }`,
     vertexColors: true,
   });
   const lineMat = new THREE.LineBasicMaterial({ color: '#e8c063', transparent: true, opacity: 0, depthWrite: false, fog: false });
-  const mwMat = new THREE.PointsMaterial({ size: 70, map: glow, vertexColors: true, transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, sizeAttenuation: false, fog: false });
-  const mwGrainMat = new THREE.PointsMaterial({ size: 1.8, map: glow, vertexColors: true, transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, sizeAttenuation: false, fog: false });
   const markMat = new THREE.SpriteMaterial({ map: sparkleTexture(), transparent: true, depthWrite: false, opacity: 0,
     blending: THREE.AdditiveBlending, fog: false, sizeAttenuation: false, color: '#ffe6a0' });
   const mark = new THREE.Sprite(markMat);
@@ -811,20 +829,69 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
   let anchors = []; // label anchors: { dir, text, kind, order }
   let marks = { lines: true, names: true, shown: false, level: 0, maxY: 0.62 };
 
+  /** The Moon's near side: the main maria where they really are, Tycho and Copernicus, limb darkening. */
   function moonTexture(fraction) {
-    return canvasTexture(256, 256, (g) => {
-      g.translate(128, 128);
-      const r = 120;
+    return canvasTexture(512, 512, (g) => {
+      g.translate(256, 256);
+      const r = 240;
       g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.clip();
-      const disc = g.createRadialGradient(-35, -35, 10, 0, 0, r);
-      disc.addColorStop(0, '#fffdf4'); disc.addColorStop(1, '#d7d9de');
-      g.fillStyle = disc; g.fillRect(-r, -r, 2 * r, 2 * r);
-      g.fillStyle = 'rgba(105,112,130,0.45)';
-      for (const [mx, my, mr] of [[-0.25, -0.2, 0.32], [0.2, -0.3, 0.22], [0.05, 0.1, 0.26], [-0.35, 0.25, 0.18], [0.35, 0.3, 0.14], [0.1, 0.45, 0.1]]) {
-        g.beginPath(); g.ellipse(mx * r, my * r, mr * r, mr * r * 0.8, 0.4, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#d9d6cf';
+      g.fillRect(-r, -r, 2 * r, 2 * r);
+      const soft = (x, y, rx, ry, rot, color, a) => {
+        g.save();
+        g.translate(x * r, y * r);
+        g.rotate(rot);
+        g.scale(1, ry / rx);
+        const grad = g.createRadialGradient(0, 0, 0, 0, 0, rx * r);
+        grad.addColorStop(0, `rgba(${color},${a})`);
+        grad.addColorStop(0.7, `rgba(${color},${a * 0.85})`);
+        grad.addColorStop(1, `rgba(${color},0)`);
+        g.fillStyle = grad;
+        g.beginPath(); g.arc(0, 0, rx * r, 0, Math.PI * 2); g.fill();
+        g.restore();
+      };
+      // maria (x: east limb on the right as seen from the northern hemisphere, y: south down)
+      const maria = [
+        [-0.55, 0.05, 0.36, 0.62, 0.3, '96,98,104', 0.75],  // Oceanus Procellarum
+        [-0.28, -0.42, 0.3, 0.24, 0.2, '92,94,100', 0.85],  // Mare Imbrium
+        [0.13, -0.38, 0.17, 0.15, 0, '100,102,108', 0.8],   // Mare Serenitatis
+        [0.3, -0.08, 0.22, 0.17, 0.3, '96,98,104', 0.8],    // Mare Tranquillitatis
+        [0.66, -0.3, 0.12, 0.1, 0, '92,94,100', 0.85],      // Mare Crisium
+        [0.58, 0.12, 0.13, 0.17, 0.2, '104,106,112', 0.7],  // Mare Fecunditatis
+        [0.33, 0.27, 0.1, 0.09, 0, '104,106,112', 0.7],     // Mare Nectaris
+        [-0.18, 0.32, 0.17, 0.13, 0, '106,108,114', 0.65],  // Mare Nubium
+        [-0.5, 0.36, 0.1, 0.1, 0, '100,102,108', 0.7],      // Mare Humorum
+        [0.02, -0.68, 0.32, 0.07, 0, '108,110,116', 0.55],  // Mare Frigoris
+        [-0.05, 0.02, 0.1, 0.08, 0, '110,112,118', 0.55],   // Sinus Medii
+      ];
+      for (const m of maria) soft(...m);
+      // speckle of small craters
+      let seed = 99;
+      const rr = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+      for (let i = 0; i < 900; i++) {
+        const a = rr() * Math.PI * 2, d = Math.sqrt(rr()) * r, cr = 1 + rr() * rr() * 7;
+        g.fillStyle = rr() < 0.5 ? 'rgba(255,255,250,0.18)' : 'rgba(70,72,78,0.16)';
+        g.beginPath(); g.arc(Math.cos(a) * d, Math.sin(a) * d, cr, 0, Math.PI * 2); g.fill();
       }
+      // bright young craters with rays: Tycho (south) and Copernicus
+      for (const [x, y, len, n] of [[-0.12, 0.62, 0.9, 14], [-0.3, -0.08, 0.35, 10]]) {
+        g.strokeStyle = 'rgba(255,255,250,0.18)';
+        g.lineWidth = 3;
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * Math.PI * 2 + rr() * 0.3;
+          g.beginPath(); g.moveTo(x * r, y * r); g.lineTo((x + Math.cos(a) * len * (0.5 + rr() * 0.5)) * r, (y + Math.sin(a) * len * (0.5 + rr() * 0.5)) * r); g.stroke();
+        }
+        g.fillStyle = '#f7f6f0';
+        g.beginPath(); g.arc(x * r, y * r, 7, 0, Math.PI * 2); g.fill();
+      }
+      // limb darkening
+      const limb = g.createRadialGradient(0, 0, r * 0.55, 0, 0, r);
+      limb.addColorStop(0, 'rgba(0,0,0,0)');
+      limb.addColorStop(1, 'rgba(20,22,30,0.35)');
+      g.fillStyle = limb;
+      g.fillRect(-r, -r, 2 * r, 2 * r);
       // the lit limb faces +x (the Sun); darken the rest for the phase
-      g.fillStyle = 'rgba(6,10,22,0.96)';
+      g.fillStyle = 'rgba(4,7,16,0.97)';
       g.beginPath();
       g.arc(0, 0, r + 2, Math.PI / 2, Math.PI * 1.5);
       g.ellipse(0, 0, Math.abs(2 * fraction - 1) * r, r + 2, 0, Math.PI * 1.5, Math.PI / 2, fraction > 0.5);
@@ -841,24 +908,40 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
       for (const c of [...skyContent.children]) {
         skyContent.remove(c);
         c.geometry?.dispose();
-        if (c.material && c.material !== starMat && c.material !== lineMat && c.material !== mwMat && c.material !== mwGrainMat) {
+        if (c.material && c.material !== starMat && c.material !== lineMat) {
           c.material.map?.dispose();
           c.material.dispose();
         }
       }
       moonSprite = moonHalo = moonLimb = null;
+      // the Milky Way picture: rotation from this sky's directions to galactic coordinates
+      if (s.lst !== undefined) {
+        const lat = s.lat * D2R, GAL = [[-0.0548755604, -0.8734370902, -0.4838350155],
+          [0.4941094279, -0.444829630, 0.7469822445], [-0.867666149, -0.1980763734, 0.4559837762]];
+        const toGal = (x, y, z) => {
+          const alt = Math.asin(y), az = Math.atan2(x, -z);
+          const dec = Math.asin(Math.sin(lat) * Math.sin(alt) + Math.cos(lat) * Math.cos(alt) * Math.cos(az));
+          const H = Math.atan2(-Math.sin(az) * Math.cos(alt), Math.cos(lat) * Math.sin(alt) - Math.sin(lat) * Math.cos(alt) * Math.cos(az));
+          const ra = s.lst * D2R - H;
+          const e = [Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), Math.sin(dec)];
+          return GAL.map((row) => row[0] * e[0] + row[1] * e[1] + row[2] * e[2]);
+        };
+        const cx = toGal(1, 0, 0), cy = toGal(0, 1, 0), cz = toGal(0, 0, 1);
+        domeUniforms.uGal.value.set(cx[0], cy[0], cz[0], cx[1], cy[1], cz[1], cx[2], cy[2], cz[2]);
+        domeUniforms.uMWOn.value = 1;
+      }
       // stars and planets
       const pos = [], col = [], size = [], bright = [], seed = [], alts = [];
       const add = (alt, az, rgb, mag, sz) => {
         const v = hv(alt, az, SKY_R);
         pos.push(v.x, v.y, v.z);
         col.push(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
-        size.push(sz ?? Math.min(26, 6.5 + Math.max(0, 6.5 - mag) * 2.3));
-        bright.push(Math.min(1.6, Math.max(0.24, 10 ** (-0.4 * (mag - 2.2)))));
+        size.push(sz ?? Math.min(18, Math.max(1.8, 1.8 + (8.5 - mag) * 1.15)));
+        bright.push(Math.min(2.0, Math.max(0.05, 10 ** (-0.3 * (mag - 2.0)))));
         seed.push(rand());
         alts.push(alt);
       };
-      for (const st of s.stars) if (st.alt > -0.5) add(st.alt, st.az, st.color, st.mag);
+      for (const st of s.deep || s.stars) if (st.alt > -0.5) add(st.alt, st.az, st.color, st.mag);
       const planetRGB = (hex) => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
       for (const p of s.planets) add(p.alt, p.az, planetRGB(p.color), Math.min(p.mag, 1), Math.min(30, 9 + Math.max(0, 2 - p.mag) * 4));
       const geo = new THREE.BufferGeometry();
@@ -869,21 +952,6 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
       geo.setAttribute('seed', new THREE.Float32BufferAttribute(seed, 1));
       geo.setAttribute('alt', new THREE.Float32BufferAttribute(alts, 1));
       skyContent.add(new THREE.Points(geo, starMat));
-      // the Milky Way: a soft glow plus a fine grain of unresolved stars
-      for (const [mat, k] of [[mwMat, 0.016], [mwGrainMat, 0.22]]) {
-        const mp = [], mc = [];
-        for (const pt of s.milkyway) {
-          if (pt.alt < 0) continue;
-          const v = hv(pt.alt, pt.az, SKY_R + 10);
-          mp.push(v.x, v.y, v.z);
-          const a = k * pt.w * Math.min(1, pt.alt / 10);
-          mc.push(0.78 * a, 0.84 * a, a);
-        }
-        const g = new THREE.BufferGeometry();
-        g.setAttribute('position', new THREE.Float32BufferAttribute(mp, 3));
-        g.setAttribute('color', new THREE.Float32BufferAttribute(mc, 3));
-        skyContent.add(new THREE.Points(g, mat));
-      }
       // constellation figures
       const seg = [];
       for (const line of s.lines) {
@@ -900,7 +968,7 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
       // the Moon, with its real phase, a little larger than life so it reads on a phone
       if (s.moon && s.moon.alt > -1) {
         const dir = hv(s.moon.alt, s.moon.az);
-        moonSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTexture(s.moon.fraction), color: '#a9adb6', transparent: true, depthWrite: false, fog: false }));
+        moonSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTexture(s.moon.fraction), color: '#c4c6cc', transparent: true, depthWrite: false, fog: false }));
         moonSprite.position.copy(dir).multiplyScalar(SKY_R - 20);
         const size = (SKY_R - 20) * Math.tan(2.4 * D2R);
         moonSprite.scale.set(size, size, 1);
@@ -1025,6 +1093,9 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
   let progress = reducedMotion || startAtEnd ? 1 : 0;
   let finale = null;               // camera turning towards a part of the sky: {from, to, t0, dur, resolve}
   let lastYaw = -Math.PI, lastPitch = 9;
+  let extraFov = 0;                // widened field of view for the final sky
+  const baseFov = () => (camera.aspect < 1 ? 66 : 58);
+  const wideExtra = () => (camera.aspect < 1 ? 26 : 22);
   const target = new THREE.Vector3(), dirV = new THREE.Vector3(), ang = new THREE.Vector3();
 
   function place(t, time) {
@@ -1035,6 +1106,9 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
       const e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
       lastYaw = finale.from[0] + (finale.to[0] - finale.from[0]) * e;
       lastPitch = finale.from[1] + (finale.to[1] - finale.from[1]) * e;
+      const fov = baseFov() + finale.fov[0] + (finale.fov[1] - finale.fov[0]) * e;
+      extraFov = fov - baseFov();
+      if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
       if (k >= 1 && finale.resolve) { finale.resolve(); finale.resolve = null; }
       const yaw = lastYaw + Math.sin(time * 0.11) * 0.004, pitch = lastPitch + Math.sin(time * 0.17) * 0.1;
       camera.lookAt(target.copy(camera.position).add(lookDir(yaw, pitch, dirV)));
@@ -1066,7 +1140,7 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
       composer.setSize(w, h);
       bloom.resolution.set(w / 2, h / 2);
       camera.aspect = w / h;
-      camera.fov = w < h ? 66 : 58; // a wider view on portrait phones
+      camera.fov = (w < h ? 66 : 58) + extraFov; // a wider view on portrait phones
       camera.updateProjectionMatrix();
     }
   }
@@ -1107,7 +1181,7 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
     // constellation lines and the Christmas-star mark ease in and out
     const want = marks.shown ? 1 : 0;
     marks.level += (want - marks.level) * Math.min(1, dt * 1.5);
-    lineMat.opacity = marks.lines ? 0.3 * marks.level : 0;
+    lineMat.opacity = marks.lines ? 0.2 * marks.level : 0;
     markMat.opacity = 0.95 * marks.level;
     if (moonSprite && moonLimb) {
       // turn the Moon so its lit side faces the Sun as seen on screen
@@ -1140,15 +1214,17 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
     pause(v = true) { paused = v; },
     setSky,
     /** Turn the camera to look at azimuth/altitude (degrees) over `seconds`; resolves when there. */
-    turnTo(az, alt, seconds = 4.5) {
+    turnTo(az, alt, seconds = 4.5, wide = true) {
       let to = -az * D2R;
       while (to - lastYaw > Math.PI) to -= 2 * Math.PI;
       while (lastYaw - to > Math.PI) to += 2 * Math.PI;
       return new Promise((resolve) => {
-        finale = { from: [lastYaw, lastPitch], to: [to, alt], t0: last || performance.now() / 1000,
-          dur: reducedMotion ? 0.01 : seconds, resolve };
+        finale = { from: [lastYaw, lastPitch], to: [to, alt], fov: [extraFov, wide ? wideExtra() : 0],
+          t0: last || performance.now() / 1000, dur: reducedMotion ? 0.01 : seconds, resolve };
       });
     },
+    /** The field of view (degrees, vertical) the final sky is shown with, for an aspect ratio. */
+    wideFov(aspect) { return aspect < 1 ? 92 : 80; },
     /** Show or hide the constellation lines, names and the Christmas-star mark. */
     setMarks(opts) { Object.assign(marks, opts); },
     /** Render a still at w × h and return it with the labels laid out for that frame. */
@@ -1160,16 +1236,12 @@ export function createIntro(canvas, { reducedMotion = false, fixedProgress = nul
       composer.setSize(w, h);
       bloom.resolution.set(w / 2, h / 2);
       camera.aspect = w / h;
-      camera.fov = w < h ? 66 : 58;
+      camera.fov = (w < h ? 66 : 58) + (extraFov > 0 ? (w < h ? 26 : 22) : 0);
       camera.updateProjectionMatrix();
       // star sizes are in screen pixels; scale them to the still's resolution
-      const k = h / 820;
+      const k = h / 1150;
       pixelUniform.value = k;
-      mwMat.size = 70 * k;
-      mwGrainMat.size = 1.8 * k;
       if (useBloom) composer.render(); else renderer.render(scene, camera);
-      mwMat.size = 70;
-      mwGrainMat.size = 1.8;
       const out = document.createElement('canvas');
       out.width = w;
       out.height = h;

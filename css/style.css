@@ -344,3 +344,13 @@ footer a { color: var(--gold); }
   #stage.editing #finale { opacity: .25; }
 }
 .no-webgl { background: radial-gradient(ellipse at 50% 20%, #15315a, #070d1a 70%); }
+
+/* compact words so the sky gets the room */
+#finale .snowy.big { font-size: clamp(40px, 5.6vw, 72px); }
+.f-name { font-size: clamp(19px, 2.4vw, 26px); }
+.f-message { font-size: clamp(14px, 1.5vw, 17px); max-width: 560px; }
+.f-rule { margin: 2px 0 0; }
+.f-actions { margin-top: 6px; }
+.f-actions button { padding: 9px 18px; font-size: 13px; }
+#stage #finale { gap: 6px; }
+.finale-shade { background: linear-gradient(180deg, transparent 62%, rgba(5,10,22,.55) 78%, rgba(5,10,22,.88) 100%); }

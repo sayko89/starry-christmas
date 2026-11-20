@@ -1,8 +1,25 @@
 # Third-party data, code and fonts
 
-## Star catalogue and constellations — d3-celestial
+## Stars drawn in the sky — HYG database
 
-`data/stars.json` and `data/constellations.json` are derived from the data
+`data/stars-deep.bin` holds every star of the [HYG database](https://github.com/astronexus/HYG-Database)
+v4.1 (David Nash / astronexus: the Hipparcos, Yale Bright Star and Gliese catalogues combined) down to
+magnitude 8.5 — 61,816 stars — packed by `tools/build_data.py`. HYG is licensed under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); this packed file is an adaptation of
+it and is shared under the same licence.
+
+## The Milky Way — Gaia EDR3 rendering
+
+`textures/milky-way.jpg` is *Milky Way 360 equirectangular rendering with foreground stars removed*
+by Kevinmloch (made with bsrender from ESA Gaia EDR3 data; ESA/Gaia/DPAC), from
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Milky_Way_360_equirectangular_rendering_with_foreground_stars_removed.png),
+licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). It is the 3840 × 1920
+JPEG of that file as packaged in the `astraeus-data` npm package; it is not modified (it is dimmed and
+projected onto the sky when drawn).
+
+## Star names and constellations — d3-celestial
+
+`data/stars.json` (used for star names and the Christmas star) and `data/constellations.json` are derived from the data
 files of [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn (star positions from
 the Hipparcos catalogue) by `tools/build_data.py`.
 

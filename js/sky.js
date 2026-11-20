@@ -1,16 +1,32 @@
 // Turns the catalogues into what is above the horizon from one place at one moment.
 // Everything is returned as altitude/azimuth (degrees); card.js decides how to frame it.
-import { observer, starColor } from './astro.js';
+import { lst, observer, starColor } from './astro.js';
 
 let data = null;
 
 export async function loadData(base = 'data/') {
   if (data) return data;
   const get = (name) => fetch(base + name).then((r) => r.json());
-  const [stars, constellations, cities] = await Promise.all(
-    ['stars.json', 'constellations.json', 'cities.json'].map(get));
-  data = { stars, constellations, cities };
+  const [stars, constellations, cities, deep] = await Promise.all([
+    ...['stars.json', 'constellations.json', 'cities.json'].map(get),
+    fetch(base + 'stars-deep.bin').then((r) => r.arrayBuffer()).then(decodeDeep),
+  ]);
+  data = { stars, constellations, cities, deep };
   return data;
+}
+
+/** Unpack data/stars-deep.bin (see tools/build_data.py): ~60,000 HYG stars to magnitude 8.5. */
+export function decodeDeep(buffer) {
+  const v = new DataView(buffer);
+  const n = buffer.byteLength / 6;
+  const ra = new Float32Array(n), dec = new Float32Array(n), mag = new Float32Array(n), ci = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    ra[i] = (v.getUint16(i * 6, true) / 65535) * 360;
+    dec[i] = (v.getInt16(i * 6 + 2, true) / 32767) * 90;
+    mag[i] = v.getUint8(i * 6 + 4) / 24 - 2;
+    ci[i] = v.getUint8(i * 6 + 5) / 100 - 0.5;
+  }
+  return { n, ra, dec, mag, ci };
 }
 
 const PLANETS = [
@@ -99,5 +115,16 @@ export function computeSky({ date, lat, lon }, catalogue = data, Astronomy = glo
   ];
   const brightest = candidates.sort((a, b) => a.mag - b.mag)[0] || null;
 
-  return { stars, lines, labels, milkyway, planets, moon, sun, brightest, lat };
+  // every catalogue star above the horizon, for drawing (the named list above is for labels)
+  const deep = [];
+  if (catalogue.deep) {
+    const d = catalogue.deep;
+    for (let i = 0; i < d.n; i++) {
+      const { alt, az } = where(d.ra[i], d.dec[i]);
+      if (alt < -0.5) continue;
+      deep.push({ alt, az, mag: d.mag[i], color: starColor(d.ci[i]) });
+    }
+  }
+
+  return { stars, deep, lines, labels, milkyway, planets, moon, sun, brightest, lat, lst: lst(date, lon) };
 }

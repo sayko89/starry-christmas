@@ -18,7 +18,7 @@ const T = {
     ns: ['K', 'G'], ew: ['D', 'B'], moon: 'Ay',
     starLabel: (n) => `✦ ${n}`,
     star: (n, kind) => (kind === 'planet' ? `Gecenin en parlak ışığı: ${n}` : `Gecenin Noel yıldızı: ${n}`),
-    credit: 'Yıldızlar: Hipparcos / d3-celestial · Ay ve gezegenler: astronomy-engine',
+    credit: 'Yıldızlar: HYG (Hipparcos, Yale, Gliese) · Samanyolu: Gaia EDR3, Kevinmloch (CC BY-SA) · Ay ve gezegenler: astronomy-engine',
     replay: 'Baştan izle',
   },
   en: {
@@ -35,7 +35,7 @@ const T = {
     ns: ['N', 'S'], ew: ['E', 'W'], moon: 'Moon',
     starLabel: (n) => `✦ ${n}`,
     star: (n, kind) => (kind === 'planet' ? `Brightest light of the night: ${n}` : `Your Christmas star: ${n}`),
-    credit: 'Stars: Hipparcos / d3-celestial · Moon and planets: astronomy-engine',
+    credit: 'Stars: HYG (Hipparcos, Yale, Gliese) · Milky Way: Gaia EDR3, Kevinmloch (CC BY-SA) · Moon and planets: astronomy-engine',
     replay: 'Watch again',
   },
 };
@@ -107,13 +107,32 @@ function cardText() {
   };
 }
 
-/** Where to point the camera: the Moon if it is up, else the Christmas star, else the celestial equator. */
+/**
+ * Where to point the camera: the Christmas star and the Moon together when both fit in the wide
+ * view, otherwise the Christmas star (or the Moon, or the celestial equator). Returns the azimuth and
+ * the camera's pitch, chosen so they sit in the upper part of the screen, above the words.
+ */
 function viewTarget(s) {
-  // Frame the Christmas star in the upper third, with the horizon and the town's glow below when it
-  // fits; if it is very high, or there is none, use the Moon or the celestial equator instead.
-  const ok = (o, top) => o && o.alt > 8 && o.alt < top;
-  const pick = ok(s.brightest, 82) ? s.brightest : ok(s.moon, 70) ? s.moon : { alt: 35, az: s.lat >= 0 ? 180 : 0 };
-  return { az: pick.az, alt: Math.max(6, Math.min(58, pick.alt - 11)) };
+  const D = Math.PI / 180;
+  const aspect = innerWidth / innerHeight;
+  const v = intro ? intro.wideFov(aspect) : 80;
+  const h = (2 * Math.atan(Math.tan((v / 2) * D) * aspect)) / D;
+  const star = s.brightest && s.brightest.alt > 5 ? s.brightest : null;
+  const moon = s.moon && s.moon.alt > 3 ? s.moon : null;
+  // the usable band of the screen is from 8% to 48% of its height (the words sit below)
+  const pitchFor = (lo, hi) => (lo + hi) / 2 - v * 0.22; // the middle of that band is 22% of the view above centre
+  const fits = (lo, hi) => hi - lo <= v * 0.38;
+  if (star && moon) {
+    const dAz = ((moon.az - star.az + 540) % 360) - 180;
+    const across = Math.abs(dAz) * Math.cos(((moon.alt + star.alt) / 2) * D);
+    const lo = Math.min(moon.alt, star.alt), hi = Math.max(moon.alt, star.alt);
+    if (across < h * 0.75 && fits(lo, hi)) {
+      return { az: (star.az + dAz / 2 + 360) % 360, alt: Math.max(4, Math.min(62, pitchFor(lo, hi))), both: true };
+    }
+  }
+  const o = star || moon;
+  if (o) return { az: o.az, alt: Math.max(4, Math.min(62, pitchFor(o.alt, o.alt))) };
+  return { az: s.lat >= 0 ? 180 : 0, alt: 25 };
 }
 
 function skyOptions() {

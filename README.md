@@ -40,9 +40,9 @@ star**, and the greeting is written underneath.
 
 | | |
 |---|---|
-| **The real sky** | 5,000 stars to magnitude 6, placed by altitude and azimuth for the chosen place and moment. Each is drawn by a small shader: brightness from its magnitude, colour from its temperature, dimmer and redder near the horizon, twinkling more there. The Moon has its real phase, turned so its lit side faces the Sun; the planets are where they really are; the Milky Way follows the real galactic plane. |
+| **The real sky** | 61,816 stars down to magnitude 8.5 from the HYG catalogue (Hipparcos, Yale, Gliese), placed by altitude and azimuth for the chosen place and moment — the density of a long-exposure photograph. Each is drawn by a small shader: brightness from its magnitude, colour from its temperature, dimmer and redder near the horizon, twinkling more there. Behind them, the real Milky Way: a rendering of the Galaxy made from Gaia EDR3, turned pixel by pixel from the local sky to galactic coordinates, so its dust lanes are where they really are that night. The Moon has its real phase (with its maria, Tycho and Copernicus), turned so its lit side faces the Sun; the planets are where they really are. |
 | **Names** | Bright stars, planets, the Moon and the main constellations are labelled beside them, with gold constellation figures; labels never overlap each other or the words. Both can be turned off. |
-| **The Christmas star** | The brightest star or planet above 10° gets a gold sparkle, and the camera turns to frame it — Jupiter next to Regulus over Samsun in 2026, Sirius over Sydney. |
+| **The Christmas star** | The brightest star or planet above 10° gets a gold sparkle. The camera turns to frame it — and the Moon too, when both fit — while the view widens to 80° (92° on phones), with the horizon and the town below when there is room: Jupiter and Mars in Leo over Samsun in 2026, Sirius and the Milky Way over Sydney. |
 | **The opening** | A 3D scene built entirely from code with [three.js](https://threejs.org) — no models or images: snow-covered roofs and chimneys, lit windows with curtains and little trees, slushy streets with tyre tracks, pools of lantern light on the snow, a crowd in winter coats and hats, a fir made of ~1,500 branches, and a whole town of lit houses around it. Bloom and filmic tone mapping make the lights glow; if a phone struggles, the bloom switches itself off. The street runs north–south, so the sky above it is the real one from the start. *Skip* jumps ahead; with reduced motion turned on, the flight is skipped. |
 | **Your words** | Greeting, name and message; city, date, time and coordinates underneath. Turkish and English. *Edit* opens a panel to change any of it — a new city or night turns the camera to the new sky. |
 | **Sharing** | *Download PNG* (1200 × 1800, ready to print at 4 × 6 in: the sky, its names and the words) and *Copy link* — every setting lives in the URL, and a shared link opens straight on the finished sky. |
@@ -80,15 +80,19 @@ flowchart LR
 5. **Onto the sky.** Each altitude/azimuth becomes a direction in the 3D scene (north is down the
    street); the camera then looks at it like a person standing in the town would.
 
-Star colours come from the B–V colour index → temperature → blackbody colour. The Moon (with its
+Star colours come from the B–V colour index → temperature → blackbody colour. For the Milky Way,
+the dome's shader runs the same chain backwards for every pixel — altitude/azimuth → hour angle and
+declination (latitude) → right ascension (sidereal time) → galactic longitude and latitude — and
+samples the Gaia picture there. The Moon (with its
 phase) and the planets come from [Astronomy Engine](https://github.com/cosinekitty/astronomy).
 
 ### Tested against known answers
 
-`npm test` (8 tests) checks the formulas against the worked examples in Meeus (sidereal time, precession)
+`npm test` (11 tests) checks the formulas against the worked examples in Meeus (sidereal time, precession)
 and against Astronomy Engine, an independent full-precision library: for six bright stars, seen from
 Samsun, New York, Sydney and Tromsø, our positions agree to within **0.05°** — a tenth of the Moon's
-width.
+width. They also check that the packed 61,816-star file decodes correctly (Sirius first, Betelgeuse
+red, Rigel blue).
 
 <br>
 
@@ -103,12 +107,13 @@ width.
 | [`js/finale.js`](js/finale.js) | Draws the names and the words onto the PNG |
 | [`js/quiz.js`](js/quiz.js) | Welcome line and the four questions, with letters falling like snow |
 | [`js/app.js`](js/app.js) | The flow from the opening to the sky, edit panel, Turkish/English text, URL sharing, PNG download |
-| [`tools/build_data.py`](tools/build_data.py) | Builds the small JSON files in `data/` from the open source catalogues |
+| [`tools/build_data.py`](tools/build_data.py) | Builds the files in `data/` from the open catalogues, including the packed 61,816-star `stars-deep.bin` |
+| [`textures/`](textures) | The Gaia EDR3 Milky Way picture |
 | [`tests/`](tests) | Astronomy tests (`node --test`) |
 
 Plain HTML, CSS and JavaScript modules — no framework and no build step. A shared link opens the
 finished sky directly, without the opening. The whole page, with the 3D
-scene, star data and fonts, is about 1.4 MB (around 350 KB compressed).
+scene, 61,816 stars (360 KB), the Milky Way picture (520 KB) and fonts, is about 2.3 MB.
 
 <br>
 
@@ -130,7 +135,7 @@ npm test
 Rebuild the data files from the original catalogues:
 
 ```bash
-python3 tools/build_data.py path/to/d3-celestial/data path/to/city-timezones/data/cityMap.json
+python3 tools/build_data.py path/to/d3-celestial/data path/to/city-timezones/data/cityMap.json path/to/HYG-Database/hyg/CURRENT/hygdata_v41.csv
 ```
 
 <br>
@@ -145,10 +150,12 @@ python3 tools/build_data.py path/to/d3-celestial/data path/to/city-timezones/dat
 
 ## Credits
 
-Star positions from the Hipparcos catalogue via [d3-celestial](https://github.com/ofrohn/d3-celestial)
-(BSD), cities from [city-timezones](https://github.com/kevinroberts/city-timezones) (MIT), Moon and
-planets from [Astronomy Engine](https://github.com/cosinekitty/astronomy) (MIT), 3D with
-[three.js](https://threejs.org) (MIT), fonts Great Vibes,
-Playfair Display and Inter (SIL OFL). Details in [THIRD_PARTY.md](THIRD_PARTY.md). Code: MIT.
+Stars from the [HYG database](https://github.com/astronexus/HYG-Database) v4.1 (CC BY-SA 4.0);
+the Milky Way from Kevinmloch's Gaia EDR3 rendering (ESA/Gaia/DPAC, CC BY-SA 4.0); star names and
+constellations from [d3-celestial](https://github.com/ofrohn/d3-celestial) (BSD); cities from
+[city-timezones](https://github.com/kevinroberts/city-timezones) (MIT); Moon and planets from
+[Astronomy Engine](https://github.com/cosinekitty/astronomy) (MIT); 3D with [three.js](https://threejs.org)
+(MIT); fonts Great Vibes, Playfair Display and Inter (SIL OFL). Details in [THIRD_PARTY.md](THIRD_PARTY.md).
+Code: MIT.
 
 <p align="center"><sub>Starry Christmas · Safiye Özkan · 2026</sub></p>
