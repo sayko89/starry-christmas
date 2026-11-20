@@ -8,14 +8,12 @@ Inputs
       starnames.json               proper names
       constellations.json          names and label positions (with Turkish names)
       constellations.lines.json    stick figures
-      mw.json                      Milky Way outline, 5 brightness levels
   city-timezones  (MIT)             https://github.com/kevinroberts/city-timezones
       cityMap.json                 cities with latitude, longitude and IANA time zone
 
 Outputs (in data/)
   stars.json           [[ra°, dec°, mag, b-v, name?], ...] sorted from brightest
   constellations.json  [{id, en, tr, label:[ra, dec], lines:[[[ra, dec], ...], ...]}, ...]
-  milkyway.json        [[[[ra, dec], ...] polygons] per brightness level]
   cities.json          [[name, country, lat, lon, tz], ...]
 """
 import json
@@ -90,19 +88,6 @@ def build_constellations(src):
     return out
 
 
-def build_milkyway(src):
-    levels = []
-    for f in json.load(open(os.path.join(src, 'mw.json')))['features']:
-        polys = []
-        for polygon in f['geometry']['coordinates']:
-            for ring in polygon:
-                pts = [[r(ra(x), 1), r(y, 1)] for x, y in ring[::2]]
-                if len(pts) > 3:
-                    polys.append(pts)
-        levels.append(polys)
-    return levels
-
-
 def build_cities(path, min_pop=250_000):
     rows = json.load(open(path))
     by_key = {}
@@ -140,7 +125,6 @@ def main(celestial, cities):
     os.makedirs(OUT, exist_ok=True)
     write('stars.json', build_stars(celestial))
     write('constellations.json', build_constellations(celestial))
-    write('milkyway.json', build_milkyway(celestial))
     write('cities.json', build_cities(cities))
 
 

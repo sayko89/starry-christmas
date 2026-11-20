@@ -4,10 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Starry Christmas · Yıldızlı Noel Kartı</title>
-  <meta name="description" content="A Christmas card with the real night sky over your city at midnight, drawn inside a Christmas bauble.">
+  <meta name="description" content="A Christmas card with the real night sky over your city at midnight, above a snowy forest where a sleigh is waiting.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎄</text></svg>">
   <link rel="stylesheet" href="css/style.css">
-  <script type="importmap">{ "imports": { "three": "./vendor/three.min.js" } }</script>
+  <script type="importmap">{ "imports": {
+    "three": "./vendor/three.min.js",
+    "three/addons/postprocessing/EffectComposer.js": "./vendor/three.min.js",
+    "three/addons/postprocessing/RenderPass.js": "./vendor/three.min.js",
+    "three/addons/postprocessing/UnrealBloomPass.js": "./vendor/three.min.js",
+    "three/addons/postprocessing/OutputPass.js": "./vendor/three.min.js"
+  } }</script>
   <script src="vendor/astronomy.browser.min.js"></script>
   <script type="module" src="js/app.js"></script>
 </head>

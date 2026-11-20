@@ -1,8 +1,8 @@
 # Third-party data, code and fonts
 
-## Star catalogue, constellations and Milky Way — d3-celestial
+## Star catalogue and constellations — d3-celestial
 
-`data/stars.json`, `data/constellations.json` and `data/milkyway.json` are derived from the data
+`data/stars.json` and `data/constellations.json` are derived from the data
 files of [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn (star positions from
 the Hipparcos catalogue) by `tools/build_data.py`.
 
@@ -35,7 +35,8 @@ by Don Cross, MIT License (the full licence text is at the top of the file).
 
 `vendor/three.min.js` is [three.js](https://github.com/mrdoob/three.js) r187 (MIT License,
 Copyright © 2010-2026 three.js authors), bundled and minified with only the classes the opening
-scene uses:
+scene uses, plus the bloom post-processing passes (EffectComposer, RenderPass, UnrealBloomPass,
+OutputPass):
 
 ```bash
 echo "export { AdditiveBlending, ..., WebGLRenderer } from 'three';" > entry.js
