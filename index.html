@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Starry Christmas · Yıldızlı Noel Kartı</title>
-  <meta name="description" content="A Christmas card with the real night sky over your city at midnight, above a snowy forest where a sleigh is waiting.">
+  <meta name="description" content="A Christmas card with the real night sky over your city at midnight, with every star where it really is.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎄</text></svg>">
   <link rel="stylesheet" href="css/style.css">
   <script type="importmap">{ "imports": {
@@ -44,57 +44,55 @@
         <button id="q-next" type="button" class="primary"></button>
       </div>
     </form>
-  </section>
 
-  <div id="editor" hidden>
-  <div class="garland" aria-hidden="true"></div>
-  <header>
-    <div class="lang" role="group" aria-label="Language">
-      <button data-lang="tr">TR</button><button data-lang="en">EN</button>
-    </div>
-    <h1 data-t="title">Yıldızlı Noel Kartı</h1>
-    <p class="subtitle" data-t="subtitle"></p>
-  </header>
+    <!-- the real sky: names of stars, planets, the Moon and constellations float over it -->
+    <div id="sky-labels" aria-hidden="true"></div>
+    <div class="finale-shade" aria-hidden="true"></div>
 
-  <main>
-    <section class="preview">
-      <canvas id="card" width="1200" height="1800" role="img" aria-label="Christmas card with a star map"></canvas>
-    </section>
-
-    <form class="panel" onsubmit="return false">
-      <label><span data-t="name"></span><input id="name" maxlength="40" autocomplete="off"></label>
-      <label><span data-t="message"></span><textarea id="message" rows="2" maxlength="140"></textarea></label>
-      <label><span data-t="city"></span>
-        <input id="city" list="cities" autocomplete="off">
-        <datalist id="cities"></datalist>
-      </label>
-      <button type="button" id="locate" class="link" data-t="locate"></button>
-      <div class="row">
-        <label class="grow"><span data-t="occasion"></span>
-          <select id="occasion">
-            <option value="christmas" data-t="christmas"></option>
-            <option value="newyear" data-t="newyear"></option>
-          </select>
-        </label>
-        <label class="year"><span data-t="year"></span><input id="year" type="number" min="1900" max="2100"></label>
+    <div id="finale" class="screen" hidden>
+      <div class="f-text">
+        <h2 id="f-greeting" class="snowy big"></h2>
+        <p id="f-name" class="f-name"></p>
+        <p id="f-message" class="f-message"></p>
+        <div class="f-rule" aria-hidden="true"><span>✦</span></div>
+        <p id="f-place" class="f-place"></p>
+        <p id="f-when" class="f-when"></p>
+        <p id="f-star" class="f-star"></p>
       </div>
-      <label><span data-t="greeting"></span><input id="greeting" maxlength="24" autocomplete="off"></label>
-      <div class="row toggles">
-        <label class="check"><input type="checkbox" id="lines"><span data-t="lines"></span></label>
-        <label class="check"><input type="checkbox" id="names"><span data-t="names"></span></label>
-      </div>
-      <div class="actions">
+      <div class="f-actions">
         <button type="button" id="download" class="primary" data-t="download"></button>
         <button type="button" id="share" class="secondary" data-t="share"></button>
+        <button type="button" id="edit" class="secondary" data-t="edit"></button>
       </div>
       <p id="status" role="status" aria-live="polite"></p>
-    </form>
-  </main>
+      <p class="credit"><span data-t="credit"></span> · <a href="./" id="replay" data-t="replay"></a> · <a href="https://github.com/sayko89/starry-christmas">GitHub</a></p>
+    </div>
 
-  <footer>
-    <p data-t="credit"></p>
-    <p><a href="./" id="replay" data-t="replay"></a> · <a href="https://github.com/sayko89/starry-christmas">GitHub</a> · Safiye Özkan</p>
-  </footer>
-  </div>
+    <!-- change the card without leaving the sky -->
+    <aside id="drawer" class="panel" hidden aria-labelledby="drawer-title">
+      <div class="drawer-head"><h3 id="drawer-title" data-t="editTitle"></h3><button type="button" id="drawer-close" class="close" aria-label="Close">×</button></div>
+      <form onsubmit="return false">
+        <label><span data-t="name"></span><input id="name" maxlength="40" autocomplete="off"></label>
+        <label><span data-t="message"></span><textarea id="message" rows="2" maxlength="140"></textarea></label>
+        <label><span data-t="city"></span><input id="city" list="cities" autocomplete="off"></label>
+        <button type="button" id="locate" class="link" data-t="locate"></button>
+        <div class="row">
+          <label class="grow"><span data-t="occasion"></span>
+            <select id="occasion">
+              <option value="christmas" data-t="christmas"></option>
+              <option value="newyear" data-t="newyear"></option>
+            </select>
+          </label>
+          <label class="year"><span data-t="year"></span><input id="year" type="number" min="1900" max="2100"></label>
+        </div>
+        <label><span data-t="greeting"></span><input id="greeting" maxlength="24" autocomplete="off"></label>
+        <div class="row toggles">
+          <label class="check"><input type="checkbox" id="lines"><span data-t="lines"></span></label>
+          <label class="check"><input type="checkbox" id="names"><span data-t="names"></span></label>
+        </div>
+      </form>
+    </aside>
+    <datalist id="cities"></datalist>
+  </section>
 </body>
 </html>

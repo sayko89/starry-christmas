@@ -355,7 +355,7 @@ const SLEIGH = {
 
 // --- The scene -----------------------------------------------------------------------------------
 
-export function createIntro(canvas, { stars = [], reducedMotion = false, fixedProgress = null } = {}) {
+export function createIntro(canvas, { reducedMotion = false, fixedProgress = null, labelRoot = null, startAtEnd = false } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -732,7 +732,7 @@ export function createIntro(canvas, { stars = [], reducedMotion = false, fixedPr
     [[5.5, 22.5, -54], -0.5, 14],
     [[6, 27, -68], -1.7, 6],
     [[2.5, 27, -80], -2.75, 3],
-    [[0, 27, -88], -Math.PI, 4],
+    [[0, 27, -88], -Math.PI, 9],
   ];
   const path = new THREE.CatmullRomCurve3(KEYS.map(([v]) => new THREE.Vector3(...v)));
   const angles = new THREE.CatmullRomCurve3(KEYS.map(([, yaw, pitch]) => new THREE.Vector3(yaw, pitch, 0)));
@@ -757,75 +757,240 @@ export function createIntro(canvas, { stars = [], reducedMotion = false, fixedPr
       gl_FragColor = vec4(c, 1.0); }`,
   }));
   sky.add(skyDome);
-  // Aim the sky so that where the camera ends up looking is the winter hexagon — Orion, Sirius,
-  // Gemini, Auriga: the stars of a Christmas night.
-  const eqVec = (ra, dec) => {
-    const a = THREE.MathUtils.degToRad(ra), d = THREE.MathUtils.degToRad(dec);
-    return new THREE.Vector3(Math.cos(d) * Math.cos(a), Math.sin(d), -Math.cos(d) * Math.sin(a));
-  };
-  // Point the winter hexagon at the upper part of the final frame, with Orion upright.
-  const finalDir = lookDir(-Math.PI, 26);
-  const aim = new THREE.Quaternion().setFromUnitVectors(eqVec(92, 10), finalDir);
-  {
-    // roll about the view direction so that celestial north points up and slightly left
-    const pole = eqVec(0, 90).applyQuaternion(aim);
-    const upInView = new THREE.Vector3(0, 1, 0).sub(finalDir.clone().multiplyScalar(finalDir.y)).normalize();
-    const poleInView = pole.sub(finalDir.clone().multiplyScalar(pole.dot(finalDir))).normalize();
-    const angle = Math.atan2(new THREE.Vector3().crossVectors(poleInView, upInView).dot(finalDir), poleInView.dot(upInView)) + 0.35;
-    aim.premultiply(new THREE.Quaternion().setFromAxisAngle(finalDir, angle));
+
+  // The sky is in real horizontal coordinates: the street runs north (-z) to south (+z), so the
+  // flight ends looking south and every star sits where it really is from the chosen place.
+  const D2R = Math.PI / 180;
+  const hv = (alt, az, r = 1) => new THREE.Vector3(
+    Math.cos(alt * D2R) * Math.sin(az * D2R), Math.sin(alt * D2R), -Math.cos(alt * D2R) * Math.cos(az * D2R)).multiplyScalar(r);
+  const SKY_R = 400;
+  const skyContent = new THREE.Group();
+  sky.add(skyContent);
+  const fadeUniform = { value: 1 };
+  const timeUniform = { value: 0 };
+  const pixelUniform = { value: renderer.getPixelRatio() };
+  // Each star is a point sprite with a sharp core and a faint halo; brightness follows its magnitude,
+  // stars near the horizon are dimmed and reddened by the air and twinkle more.
+  const starMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    uniforms: { uFade: fadeUniform, uTime: timeUniform, uPixel: pixelUniform },
+    vertexShader: `
+      attribute float size; attribute float bright; attribute float seed; attribute float alt;
+      uniform float uTime; uniform float uPixel;
+      varying vec3 vColor; varying float vBright;
+      void main() {
+        float low = 1.0 - clamp(alt / 50.0, 0.0, 1.0);
+        float tw = 1.0 + (0.08 + 0.32 * low) * sin(uTime * (3.0 + seed * 9.0) + seed * 40.0);
+        float ext = smoothstep(-0.5, 9.0, alt);
+        vColor = mix(color, color * vec3(1.0, 0.82, 0.62), low * low);
+        vBright = bright * ext * tw;
+        gl_PointSize = size * uPixel * (0.9 + 0.1 * tw);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform float uFade;
+      varying vec3 vColor; varying float vBright;
+      void main() {
+        float d = length(gl_PointCoord - 0.5) * 2.0;
+        float a = exp(-d * d * 14.0) + 0.18 * exp(-d * d * 3.0);
+        gl_FragColor = vec4(vColor * vBright * a * uFade, 1.0);
+      }`,
+    vertexColors: true,
+  });
+  const lineMat = new THREE.LineBasicMaterial({ color: '#e8c063', transparent: true, opacity: 0, depthWrite: false, fog: false });
+  const mwMat = new THREE.PointsMaterial({ size: 70, map: glow, vertexColors: true, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, sizeAttenuation: false, fog: false });
+  const mwGrainMat = new THREE.PointsMaterial({ size: 1.8, map: glow, vertexColors: true, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, sizeAttenuation: false, fog: false });
+  const markMat = new THREE.SpriteMaterial({ map: sparkleTexture(), transparent: true, depthWrite: false, opacity: 0,
+    blending: THREE.AdditiveBlending, fog: false, sizeAttenuation: false, color: '#ffe6a0' });
+  const mark = new THREE.Sprite(markMat);
+  mark.scale.set(0.11, 0.11, 1);
+  sky.add(mark);
+  let moonSprite = null, moonHalo = null, moonLimb = null;
+  let anchors = []; // label anchors: { dir, text, kind, order }
+  let marks = { lines: true, names: true, shown: false, level: 0, maxY: 0.62 };
+
+  function moonTexture(fraction) {
+    return canvasTexture(256, 256, (g) => {
+      g.translate(128, 128);
+      const r = 120;
+      g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.clip();
+      const disc = g.createRadialGradient(-35, -35, 10, 0, 0, r);
+      disc.addColorStop(0, '#fffdf4'); disc.addColorStop(1, '#d7d9de');
+      g.fillStyle = disc; g.fillRect(-r, -r, 2 * r, 2 * r);
+      g.fillStyle = 'rgba(105,112,130,0.45)';
+      for (const [mx, my, mr] of [[-0.25, -0.2, 0.32], [0.2, -0.3, 0.22], [0.05, 0.1, 0.26], [-0.35, 0.25, 0.18], [0.35, 0.3, 0.14], [0.1, 0.45, 0.1]]) {
+        g.beginPath(); g.ellipse(mx * r, my * r, mr * r, mr * r * 0.8, 0.4, 0, Math.PI * 2); g.fill();
+      }
+      // the lit limb faces +x (the Sun); darken the rest for the phase
+      g.fillStyle = 'rgba(6,10,22,0.96)';
+      g.beginPath();
+      g.arc(0, 0, r + 2, Math.PI / 2, Math.PI * 1.5);
+      g.ellipse(0, 0, Math.abs(2 * fraction - 1) * r, r + 2, 0, Math.PI * 1.5, Math.PI / 2, fraction > 0.5);
+      g.fill();
+    });
   }
-  const classes = [[-2, 1.5, 14], [1.5, 3, 8], [3, 4.5, 5], [4.5, 7, 3.2]];
-  for (const [lo, hi, size] of classes) {
-    const pos = [], col = [];
-    for (const [ra, dec, mag, bv] of stars) {
-      if (mag < lo || mag >= hi) continue;
-      const v = eqVec(ra, dec).applyQuaternion(aim).multiplyScalar(420);
-      pos.push(v.x, v.y, v.z);
-      const [r, g, b] = starColor(bv);
-      const k = Math.min(1, 0.55 + (6.5 - mag) * 0.15);
-      col.push((r / 255) * k, (g / 255) * k, (b / 255) * k);
+
+  /**
+   * Put a sky (from sky.js: everything in altitude/azimuth) on the dome.
+   * names: { moon, lang } for the labels. With fade, the old stars fade out and the new ones in.
+   */
+  function setSky(s, { lang = 'tr', moonName = 'Ay', starLabel = (n) => n, fade = true } = {}) {
+    const build = () => {
+      for (const c of [...skyContent.children]) {
+        skyContent.remove(c);
+        c.geometry?.dispose();
+        if (c.material && c.material !== starMat && c.material !== lineMat && c.material !== mwMat && c.material !== mwGrainMat) {
+          c.material.map?.dispose();
+          c.material.dispose();
+        }
+      }
+      moonSprite = moonHalo = moonLimb = null;
+      // stars and planets
+      const pos = [], col = [], size = [], bright = [], seed = [], alts = [];
+      const add = (alt, az, rgb, mag, sz) => {
+        const v = hv(alt, az, SKY_R);
+        pos.push(v.x, v.y, v.z);
+        col.push(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
+        size.push(sz ?? Math.min(26, 6.5 + Math.max(0, 6.5 - mag) * 2.3));
+        bright.push(Math.min(1.6, Math.max(0.24, 10 ** (-0.4 * (mag - 2.2)))));
+        seed.push(rand());
+        alts.push(alt);
+      };
+      for (const st of s.stars) if (st.alt > -0.5) add(st.alt, st.az, st.color, st.mag);
+      const planetRGB = (hex) => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+      for (const p of s.planets) add(p.alt, p.az, planetRGB(p.color), Math.min(p.mag, 1), Math.min(30, 9 + Math.max(0, 2 - p.mag) * 4));
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      geo.setAttribute('size', new THREE.Float32BufferAttribute(size, 1));
+      geo.setAttribute('bright', new THREE.Float32BufferAttribute(bright, 1));
+      geo.setAttribute('seed', new THREE.Float32BufferAttribute(seed, 1));
+      geo.setAttribute('alt', new THREE.Float32BufferAttribute(alts, 1));
+      skyContent.add(new THREE.Points(geo, starMat));
+      // the Milky Way: a soft glow plus a fine grain of unresolved stars
+      for (const [mat, k] of [[mwMat, 0.016], [mwGrainMat, 0.22]]) {
+        const mp = [], mc = [];
+        for (const pt of s.milkyway) {
+          if (pt.alt < 0) continue;
+          const v = hv(pt.alt, pt.az, SKY_R + 10);
+          mp.push(v.x, v.y, v.z);
+          const a = k * pt.w * Math.min(1, pt.alt / 10);
+          mc.push(0.78 * a, 0.84 * a, a);
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(mp, 3));
+        g.setAttribute('color', new THREE.Float32BufferAttribute(mc, 3));
+        skyContent.add(new THREE.Points(g, mat));
+      }
+      // constellation figures
+      const seg = [];
+      for (const line of s.lines) {
+        for (let k = 0; k < line.length - 1; k++) {
+          const a = line[k], b = line[k + 1];
+          if (a.alt < 0 || b.alt < 0) continue;
+          const va = hv(a.alt, a.az, SKY_R - 5), vb = hv(b.alt, b.az, SKY_R - 5);
+          seg.push(va.x, va.y, va.z, vb.x, vb.y, vb.z);
+        }
+      }
+      const lg = new THREE.BufferGeometry();
+      lg.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3));
+      skyContent.add(new THREE.LineSegments(lg, lineMat));
+      // the Moon, with its real phase, a little larger than life so it reads on a phone
+      if (s.moon && s.moon.alt > -1) {
+        const dir = hv(s.moon.alt, s.moon.az);
+        moonSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTexture(s.moon.fraction), color: '#a9adb6', transparent: true, depthWrite: false, fog: false }));
+        moonSprite.position.copy(dir).multiplyScalar(SKY_R - 20);
+        const size = (SKY_R - 20) * Math.tan(2.4 * D2R);
+        moonSprite.scale.set(size, size, 1);
+        moonHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: '#dfe8ff', transparent: true, depthWrite: false,
+          blending: THREE.AdditiveBlending, fog: false, opacity: 0.22 * Math.max(0.2, s.moon.fraction) }));
+        moonHalo.position.copy(moonSprite.position);
+        moonHalo.scale.set(size * 9, size * 9, 1);
+        skyContent.add(moonHalo, moonSprite);
+        // direction of the lit limb on the sky: towards the Sun, perpendicular to the Moon
+        const sun = s.sun ? hv(s.sun.alt, s.sun.az) : new THREE.Vector3(0, -1, 0);
+        moonLimb = sun.sub(dir.clone().multiplyScalar(sun.dot(dir))).normalize();
+      }
+      // the Christmas star
+      if (s.brightest) mark.position.copy(hv(s.brightest.alt, s.brightest.az, SKY_R - 8));
+      mark.visible = !!s.brightest;
+      // label anchors, in order of importance
+      anchors = [];
+      if (s.brightest) anchors.push({ dir: hv(s.brightest.alt, s.brightest.az), text: starLabel(lang === 'tr' ? s.brightest.tr : s.brightest.name), kind: 'xmas', order: 0 });
+      if (s.moon && s.moon.alt > 0) anchors.push({ dir: hv(s.moon.alt, s.moon.az), text: moonName, kind: 'moon', order: 1 });
+      for (const p of s.planets) {
+        if (s.brightest && s.brightest.name === p.en) continue;
+        anchors.push({ dir: hv(p.alt, p.az), text: lang === 'tr' ? p.tr : p.en, kind: 'planet', order: 2 });
+      }
+      for (const st of [...s.stars].sort((a, b) => a.mag - b.mag)) {
+        if (!st.name || st.mag > 1.7 || st.alt < 4 || (s.brightest && s.brightest.name === st.name)) continue;
+        anchors.push({ dir: hv(st.alt, st.az), text: st.name, kind: 'star', order: 3 + st.mag / 10 });
+      }
+      for (const c of s.labels) {
+        if (c.rank > 2 || c.alt < 8) continue;
+        anchors.push({ dir: hv(c.alt, c.az), text: (lang === 'tr' ? c.tr : c.en).toLocaleUpperCase(lang), kind: 'const', order: 5 + c.rank });
+      }
+      labelNodes.forEach((n) => n.remove());
+      labelNodes = [];
+    };
+    if (!fade || reducedMotion) { build(); return; }
+    // cross-fade: dim the old sky, swap, brighten
+    fadeTo(0, 0.7, () => { build(); fadeTo(1, 1.2); });
+  }
+
+  let fadeAnim = null;
+  function fadeTo(value, seconds, done) {
+    fadeAnim = { from: fadeUniform.value, to: value, t0: performance.now() / 1000, dur: seconds, done };
+  }
+
+  // --- Labels: projected from the sky to the screen each frame ----------------------------------------
+  const labelLayer = labelRoot;
+  let labelNodes = [];
+  const tmpV = new THREE.Vector3();
+  const CHAR = { xmas: 10, moon: 9, planet: 9, star: 8, const: 8.5 };
+
+  /** Lay out the labels for a camera and viewport; skips ones off-screen or overlapping. */
+  function layoutLabels(cam, w, h, maxY = 0.62) {
+    const placed = [];
+    const out = [];
+    const scale = Math.max(0.8, Math.min(1.25, w / 1000));
+    for (const a of [...anchors].sort((x, y) => x.order - y.order)) {
+      tmpV.copy(a.dir).multiplyScalar(SKY_R).add(cam.position).project(cam);
+      if (tmpV.z > 1) continue;
+      const x = (tmpV.x * 0.5 + 0.5) * w, y = (-tmpV.y * 0.5 + 0.5) * h;
+      if (x < 20 || x > w - 20 || y < 70 || y > h * maxY) continue;
+      const tw = a.text.length * CHAR[a.kind] * scale + 24, th = 22 * scale;
+      const box = a.kind === 'const' ? [x - tw / 2, y - th / 2, tw, th] : [x + 6, y - th - 4, tw, th];
+      if (box[0] + box[2] > w - 8) { if (a.kind === 'const') continue; box[0] = x - 6 - tw; }
+      if (placed.some((b) => box[0] < b[0] + b[2] && box[0] + box[2] > b[0] && box[1] < b[1] + b[3] && box[1] + box[3] > b[1])) continue;
+      placed.push(box);
+      placed.push([x - 7, y - 7, 14, 14]); // keep other labels off the star itself
+      out.push({ x, y, bx: box[0], by: box[1], text: a.text, kind: a.kind, flip: box[0] < x - 6 });
     }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    sky.add(new THREE.Points(geo, new THREE.PointsMaterial({ size, map: glow, vertexColors: true, transparent: true,
-      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false, fog: false })));
+    return out;
   }
-  // the Milky Way: thousands of faint points scattered about the galactic equator, plus a soft haze
-  const GAL = [[-0.0548755604, -0.8734370902, -0.4838350155], [0.4941094279, -0.444829630, 0.7469822445],
-    [-0.867666149, -0.1980763734, 0.4559837762]]; // equatorial -> galactic rotation (J2000)
-  const galactic = (l, b) => {
-    const g = [Math.cos(b) * Math.cos(l), Math.cos(b) * Math.sin(l), Math.sin(b)];
-    const x = GAL[0][0] * g[0] + GAL[1][0] * g[1] + GAL[2][0] * g[2];
-    const y = GAL[0][1] * g[0] + GAL[1][1] * g[1] + GAL[2][1] * g[2];
-    const z = GAL[0][2] * g[0] + GAL[1][2] * g[1] + GAL[2][2] * g[2];
-    return eqVec(THREE.MathUtils.radToDeg(Math.atan2(y, x)), THREE.MathUtils.radToDeg(Math.asin(z)));
-  };
-  const gauss = () => (rand() + rand() + rand() + rand() - 2) / 2;
-  for (const [count, size, spread, alpha] of [[12000, 2, 0.2, 0.22], [1200, 110, 0.18, 0.0045]]) {
-    const pos = [], col = [];
-    for (let i = 0; i < count; i++) {
-      const l = rand() * Math.PI * 2, b = gauss() * spread * (1.2 + 0.6 * Math.cos(l * 3 + 1));
-      const v = galactic(l, b).applyQuaternion(aim).multiplyScalar(440);
-      pos.push(v.x, v.y, v.z);
-      const k = alpha * (0.5 + rand());
-      col.push(0.75 * k, 0.82 * k, k);
+
+  function updateLabels() {
+    if (!labelLayer) return;
+    const show = marks.shown && marks.names;
+    labelLayer.classList.toggle('shown', show);
+    if (!show) return;
+    const list = layoutLabels(camera, canvas.clientWidth, canvas.clientHeight, marks.maxY);
+    while (labelNodes.length < list.length) {
+      const el = document.createElement('span');
+      labelLayer.appendChild(el);
+      labelNodes.push(el);
     }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    sky.add(new THREE.Points(geo, new THREE.PointsMaterial({ size, map: glow, vertexColors: true, transparent: true,
-      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false, fog: false })));
-  }
-  // the brightest stars get a Christmas-star sparkle, like on the card
-  const sparkleMat = new THREE.SpriteMaterial({ map: sparkleTexture(), transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, fog: false, sizeAttenuation: false });
-  for (const [ra, dec, mag] of stars.filter((st) => st[2] < 0.5)) {
-    const sp = new THREE.Sprite(sparkleMat);
-    sp.position.copy(eqVec(ra, dec).applyQuaternion(aim).multiplyScalar(410));
-    const k = 0.05 + (0.5 - mag) * 0.02;
-    sp.scale.set(k, k, 1);
-    sky.add(sp);
+    labelNodes.forEach((el, i) => {
+      const l = list[i];
+      if (!l) { el.style.display = 'none'; return; }
+      el.style.display = '';
+      el.className = `sky-label ${l.kind}${l.flip ? ' flip' : ''}`;
+      el.textContent = l.text;
+      el.style.transform = `translate(${l.x.toFixed(1)}px, ${l.y.toFixed(1)}px)`;
+    });
   }
   scene.add(sky);
 
@@ -857,12 +1022,24 @@ export function createIntro(canvas, { stars = [], reducedMotion = false, fixedPr
   const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2) * 0.55 + t * 0.45;
 
   let start = null, ended = false, onEnd = null, raf = 0, last = 0, paused = false;
-  let progress = reducedMotion ? 1 : 0;
+  let progress = reducedMotion || startAtEnd ? 1 : 0;
+  let finale = null;               // camera turning towards a part of the sky: {from, to, t0, dur, resolve}
+  let lastYaw = -Math.PI, lastPitch = 9;
   const target = new THREE.Vector3(), dirV = new THREE.Vector3(), ang = new THREE.Vector3();
 
   function place(t, time) {
     const u = ease(Math.min(1, t));
     camera.position.copy(path.getPoint(u));
+    if (finale) {
+      const k = Math.min(1, (time - finale.t0) / finale.dur);
+      const e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
+      lastYaw = finale.from[0] + (finale.to[0] - finale.from[0]) * e;
+      lastPitch = finale.from[1] + (finale.to[1] - finale.from[1]) * e;
+      if (k >= 1 && finale.resolve) { finale.resolve(); finale.resolve = null; }
+      const yaw = lastYaw + Math.sin(time * 0.11) * 0.004, pitch = lastPitch + Math.sin(time * 0.17) * 0.1;
+      camera.lookAt(target.copy(camera.position).add(lookDir(yaw, pitch, dirV)));
+      return;
+    }
     angles.getPoint(u, ang);
     let yaw = ang.x, pitch = ang.y;
     // a gentle hand-held sway on the street, calming as we rise
@@ -875,6 +1052,8 @@ export function createIntro(canvas, { stars = [], reducedMotion = false, fixedPr
       yaw += Math.sin(time * 0.11) * 0.006;
       pitch += Math.sin(time * 0.17) * 0.12;
     }
+    lastYaw = yaw;
+    lastPitch = pitch;
     lookDir(yaw, pitch, dirV);
     camera.lookAt(target.copy(camera.position).add(dirV));
   }
@@ -918,6 +1097,26 @@ export function createIntro(canvas, { stars = [], reducedMotion = false, fixedPr
     snowGeo.attributes.position.needsUpdate = true;
     snow.position.copy(camera.position);
     sky.position.copy(camera.position);
+    timeUniform.value = time;
+    pixelUniform.value = renderer.getPixelRatio();
+    if (fadeAnim) {
+      const k = Math.min(1, (time - fadeAnim.t0) / fadeAnim.dur);
+      fadeUniform.value = fadeAnim.from + (fadeAnim.to - fadeAnim.from) * k;
+      if (k >= 1) { const done = fadeAnim.done; fadeAnim = null; done?.(); }
+    }
+    // constellation lines and the Christmas-star mark ease in and out
+    const want = marks.shown ? 1 : 0;
+    marks.level += (want - marks.level) * Math.min(1, dt * 1.5);
+    lineMat.opacity = marks.lines ? 0.3 * marks.level : 0;
+    markMat.opacity = 0.95 * marks.level;
+    if (moonSprite && moonLimb) {
+      // turn the Moon so its lit side faces the Sun as seen on screen
+      const a = tmpV.copy(moonSprite.position).add(camera.position).project(camera);
+      const ax = a.x, ay = a.y;
+      const b = tmpV.copy(moonSprite.position).addScaledVector(moonLimb, 10).add(camera.position).project(camera);
+      moonSprite.material.rotation = Math.atan2((b.y - ay) / camera.aspect, b.x - ax) ;
+    }
+    updateLabels();
     topStar.material.rotation = Math.sin(time * 0.7) * 0.06;
     // if the device struggles, drop the bloom rather than the frame rate
     if (useBloom && dt > 0.045 && progress > 0.02) slowFrames++;
@@ -939,6 +1138,50 @@ export function createIntro(canvas, { stars = [], reducedMotion = false, fixedPr
     /** 0..1, how far the flight has got */
     get progress() { return progress; },
     pause(v = true) { paused = v; },
+    setSky,
+    /** Turn the camera to look at azimuth/altitude (degrees) over `seconds`; resolves when there. */
+    turnTo(az, alt, seconds = 4.5) {
+      let to = -az * D2R;
+      while (to - lastYaw > Math.PI) to -= 2 * Math.PI;
+      while (lastYaw - to > Math.PI) to += 2 * Math.PI;
+      return new Promise((resolve) => {
+        finale = { from: [lastYaw, lastPitch], to: [to, alt], t0: last || performance.now() / 1000,
+          dur: reducedMotion ? 0.01 : seconds, resolve };
+      });
+    },
+    /** Show or hide the constellation lines, names and the Christmas-star mark. */
+    setMarks(opts) { Object.assign(marks, opts); },
+    /** Render a still at w × h and return it with the labels laid out for that frame. */
+    snapshot(w, h) {
+      const pr = renderer.getPixelRatio(), aspect = camera.aspect, fov = camera.fov;
+      renderer.setPixelRatio(1);
+      renderer.setSize(w, h, false);
+      composer.setPixelRatio(1);
+      composer.setSize(w, h);
+      bloom.resolution.set(w / 2, h / 2);
+      camera.aspect = w / h;
+      camera.fov = w < h ? 66 : 58;
+      camera.updateProjectionMatrix();
+      // star sizes are in screen pixels; scale them to the still's resolution
+      const k = h / 820;
+      pixelUniform.value = k;
+      mwMat.size = 70 * k;
+      mwGrainMat.size = 1.8 * k;
+      if (useBloom) composer.render(); else renderer.render(scene, camera);
+      mwMat.size = 70;
+      mwGrainMat.size = 1.8;
+      const out = document.createElement('canvas');
+      out.width = w;
+      out.height = h;
+      out.getContext('2d').drawImage(renderer.domElement, 0, 0, w, h);
+      const labels = marks.shown && marks.names ? layoutLabels(camera, w, h) : [];
+      renderer.setPixelRatio(pr);
+      camera.aspect = aspect;
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+      canvas.width = 1; // forces resize() on the next frame
+      return { canvas: out, labels };
+    },
     dispose() {
       cancelAnimationFrame(raf);
       renderer.dispose();
