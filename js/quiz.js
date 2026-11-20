@@ -116,7 +116,7 @@ export function runQuiz(root, ctx) {
     dots.forEach((d, i) => d.classList.toggle('done', i <= step));
     back.textContent = l.back;
     back.hidden = step === 0;
-    next.textContent = step === 3 ? `${l.finish} ✨` : l.next;
+    next.textContent = step === 3 ? l.finish : l.next;
     next.disabled = false;
 
     if (step === 0) {
@@ -137,7 +137,7 @@ export function runQuiz(root, ctx) {
         b.addEventListener('click', () => { el.value = `${name}, Türkiye`; validate(); });
         chips.append(b);
       }
-      const loc = input('button', { type: 'button', className: 'chip locate', textContent: `📍 ${l.locate}` });
+      const loc = input('button', { type: 'button', className: 'chip locate', textContent: l.locate });
       loc.addEventListener('click', () => ctx.locate((label) => { el.value = label; s.placeChosen = 'geo'; validate(); }));
       chips.append(loc);
       body.append(el, chips);
@@ -147,8 +147,8 @@ export function runQuiz(root, ctx) {
       wrap.className = 'choices';
       for (const occ of ['christmas', 'newyear']) {
         const [title, sub] = l[occ];
-        const b = input('button', { type: 'button', className: 'choice' });
-        b.innerHTML = `<span class="ico">${occ === 'christmas' ? '🎄' : '🎆'}</span><b></b><small></small>`;
+        const b = input('button', { type: 'button', className: `choice ${occ}` });
+        b.innerHTML = '<span class="bauble" aria-hidden="true"></span><b></b><small></small>';
         b.querySelector('b').textContent = title;
         b.querySelector('small').textContent = sub;
         b.setAttribute('aria-pressed', s.occasion === occ);

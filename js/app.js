@@ -26,7 +26,7 @@ const T = {
       `Bakış: ${x.view.dir} · ${x.view.alt}° yukarı`,
     ].filter(Boolean),
     hideWords: 'Yazıları gizle', showWords: 'Yazıları göster',
-    starLabel: (n) => `✦ ${n}`,
+    starLabel: (n) => n,
     star: (n, kind) => (kind === 'planet' ? `Gecenin en parlak ışığı: ${n}` : `Gecenin Noel yıldızı: ${n}`),
     credit: 'Yıldızlar: HYG (Hipparcos, Yale, Gliese) · Samanyolu: Gaia EDR3, Kevinmloch (CC BY-SA) · Ay ve gezegenler: astronomy-engine',
     replay: 'Baştan izle',
@@ -53,7 +53,7 @@ const T = {
       `Looking ${x.view.dir} · ${x.view.alt}° up`,
     ].filter(Boolean),
     hideWords: 'Hide words', showWords: 'Show words',
-    starLabel: (n) => `✦ ${n}`,
+    starLabel: (n) => n,
     star: (n, kind) => (kind === 'planet' ? `Brightest light of the night: ${n}` : `Your Christmas star: ${n}`),
     credit: 'Stars: HYG (Hipparcos, Yale, Gliese) · Milky Way: Gaia EDR3, Kevinmloch (CC BY-SA) · Moon and planets: astronomy-engine',
     replay: 'Watch again',
@@ -132,7 +132,7 @@ function cardText() {
  * would show in the sky above the words: the Christmas star (required), the Moon, and how much of
  * the Milky Way. The best one wins. Returns the azimuth and the camera's pitch.
  */
-function viewTarget(s) {
+function viewTarget(s, bottom = null) {
   const D = Math.PI / 180;
   const aspect = innerWidth / innerHeight;
   const v = (intro ? intro.wideFov(aspect) : 80) * D;
@@ -142,7 +142,8 @@ function viewTarget(s) {
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   const star = s.brightest && s.brightest.alt > 3 ? dir(s.brightest.alt, s.brightest.az) : null;
   const moon = s.moon && s.moon.alt > 2 ? dir(s.moon.alt, s.moon.az) : null;
-  const TOP = innerWidth < 700 ? 0.22 : 0.18, BOTTOM = innerWidth < 700 ? 0.56 : 0.54; // between the data panel and the words
+  const TOP = innerWidth < 700 ? 0.22 : 0.18; // below the data panel
+  const BOTTOM = bottom ?? (innerWidth < 700 ? 0.5 : 0.48); // above the words
   let best = null;
   for (let az = 0; az < 360; az += 6) {
     for (let pitch = 2; pitch <= 64; pitch += 4) {
@@ -161,7 +162,19 @@ function viewTarget(s) {
       };
       if (star && !inBand(star, 0.12)) continue;
       let score = star ? 100 : 0;
-      if (moon && inBand(moon)) score += 45;
+      // keep the Christmas star near the middle of the band rather than at its edge
+      if (star) {
+        const p = screen(star), mid = (TOP + BOTTOM) / 2;
+        score += 30 * (1 - Math.abs(p[1] - mid) / ((BOTTOM - TOP) / 2)) + 10 * (1 - Math.abs(p[0] - 0.5) * 2);
+      }
+      if (moon) {
+        if (inBand(moon)) score += 45;
+        else {
+          // a Moon cut by the edge of the screen or sitting under the panel or the words looks wrong
+          const p = screen(moon);
+          if (p && p[0] > -0.05 && p[0] < 1.05 && p[1] > -0.05 && p[1] < 1.05) score -= 30;
+        }
+      }
       // the Milky Way: sample the band of the screen, score points near the galactic plane
       let mw = 0;
       for (let gx = 0.08; gx < 1; gx += 0.14) {
@@ -235,6 +248,23 @@ function fillFinaleText(animate) {
   $('f-message').hidden = !x.message;
 }
 
+/** Where the words start on screen (0..1 from the top), measured with the words laid out but invisible. */
+function wordsTop() {
+  const finale = $('finale');
+  const wasHidden = finale.hidden;
+  if (wasHidden) {
+    fillFinaleText(false);
+    finale.style.visibility = 'hidden';
+    finale.hidden = false;
+  }
+  const top = finale.querySelector('.f-text').getBoundingClientRect().top / innerHeight;
+  if (wasHidden) {
+    finale.hidden = true;
+    finale.style.visibility = '';
+  }
+  return Math.max(0.3, top - 0.05);
+}
+
 /** Turn to the chosen sky, let the names appear, then write the card underneath. */
 async function showFinale({ fresh = true } = {}) {
   finaleShown = true;
@@ -254,7 +284,7 @@ async function showFinale({ fresh = true } = {}) {
   finale.classList.remove('shown');
   intro.setSky(sky, { ...skyOptions(), fade: fresh });
   intro.setGain(small() ? 1.4 : 1);
-  const target = viewTarget(sky);
+  const target = viewTarget(sky, wordsTop());
   lastView = target;
   await new Promise((r) => setTimeout(r, fresh && !reduceMotion ? 700 : 0));
   await intro.turnTo(target.az, target.alt, fresh ? 5 : 2.5);
@@ -282,7 +312,7 @@ addEventListener('resize', fitLabels);
 function refreshSky() {
   computeCurrentSky();
   intro.setSky(sky, { ...skyOptions(), fade: true });
-  const target = viewTarget(sky);
+  const target = viewTarget(sky, $('stage').classList.contains('words-hidden') ? 0.9 : wordsTop());
   lastView = target;
   intro.turnTo(target.az, target.alt, 3);
   fillFinaleText(false);

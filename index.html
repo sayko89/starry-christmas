@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Starry Christmas · Yıldızlı Noel Kartı</title>
   <meta name="description" content="A Christmas card with the real night sky over your city at midnight, with every star where it really is.">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎄</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230a1628' stroke='%23c8102e' stroke-width='4'/%3E%3Cpath d='M32 10l5.6 15.4L54 26l-12.8 9.6L45.6 52 32 42.6 18.4 52l4.4-16.4L10 26l16.4-.6z' fill='%23e8c063'/%3E%3Ccircle cx='32' cy='33' r='4' fill='%231f6b45'/%3E%3C/svg%3E">">
   <link rel="stylesheet" href="css/style.css">
   <script type="importmap">{ "imports": {
     "three": "./vendor/three.min.js",
@@ -30,6 +30,7 @@
     <div id="welcome" class="screen" hidden>
       <p id="w-kicker" class="kicker"></p>
       <h2 id="w-title" class="snowy big"></h2>
+      <div class="xmas-rule" aria-hidden="true"><i class="red"></i><i class="gold"></i><i class="green"></i></div>
       <p id="w-sub" class="sub"></p>
       <button id="w-start" type="button" class="primary start"></button>
     </div>
@@ -37,6 +38,7 @@
     <form id="quiz" class="screen" hidden onsubmit="return false">
       <div class="ornaments" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       <h2 id="q-title" class="snowy"></h2>
+      <div class="xmas-rule" aria-hidden="true"><i class="red"></i><i class="gold"></i><i class="green"></i></div>
       <p id="q-hint" class="sub"></p>
       <div id="q-body"></div>
       <div class="q-nav">
@@ -55,7 +57,7 @@
         <h2 id="f-greeting" class="snowy big"></h2>
         <p id="f-name" class="f-name"></p>
         <p id="f-message" class="f-message"></p>
-        <div class="f-rule" aria-hidden="true"><span>✦</span></div>
+        <div class="f-rule" aria-hidden="true"><i class="red"></i><i class="gold"></i><i class="green"></i></div>
         <p id="f-place" class="f-place"></p>
         <p id="f-when" class="f-when"></p>
         <p id="f-star" class="f-star"></p>

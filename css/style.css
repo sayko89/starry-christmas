@@ -203,7 +203,6 @@ footer a { color: var(--gold); }
 .sub { margin: 0; max-width: 560px; color: rgba(246,239,225,.78); font: italic 400 clamp(16px, 2vw, 20px)/1.5 'Playfair Display', serif; }
 #welcome .sub { opacity: 0; animation: rise .9s ease 2.2s forwards; }
 .start { margin-top: 18px; min-width: 200px; font-size: 18px; padding: 16px 34px; opacity: 0; animation: rise .9s ease 2.6s forwards; }
-.start::after { content: ' ✨'; }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
 #quiz { gap: 16px; }
@@ -388,3 +387,42 @@ footer a { color: var(--gold); }
   #sky-info p { font-size: 10px; }
   .finale-shade { background: linear-gradient(180deg, transparent 58%, rgba(5,10,22,.55) 74%, rgba(5,10,22,.9) 100%); }
 }
+
+/* ---------------------------------------------------------------------------------------------
+   Christmas colours instead of emoji: red, gold and green rules, baubles for the two nights
+   --------------------------------------------------------------------------------------------- */
+:root { --green-hi: #3fa66b; }
+.xmas-rule, .f-rule { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.xmas-rule { margin: 2px 0 4px; }
+.xmas-rule i, .f-rule i { display: block; border-radius: 999px; }
+.xmas-rule i.red, .xmas-rule i.green { width: 46px; height: 2px; }
+.xmas-rule i.gold { width: 18px; height: 6px; }
+.f-rule::before, .f-rule::after { display: none; }
+.f-rule i { width: 7px; height: 7px; }
+.f-rule i.red, .xmas-rule i.red { background: var(--red-hi); box-shadow: 0 0 8px rgba(224,35,63,.6); }
+.f-rule i.gold, .xmas-rule i.gold { background: var(--gold); box-shadow: 0 0 8px rgba(232,192,99,.6); }
+.f-rule i.green, .xmas-rule i.green { background: var(--green-hi); box-shadow: 0 0 8px rgba(63,166,107,.6); }
+.f-rule { position: relative; width: 240px; height: 10px; }
+.f-rule i.red { margin-right: 4px; }
+.f-rule i.green { margin-left: 4px; }
+.f-rule { background: linear-gradient(90deg, transparent, rgba(224,35,63,.55) 22%, transparent 40%, transparent 60%, rgba(63,166,107,.55) 78%, transparent) center / 100% 1px no-repeat; }
+#welcome .xmas-rule { opacity: 0; animation: rise .9s ease 2s forwards; }
+#quiz .xmas-rule { opacity: 0; animation: rise .6s ease .8s forwards; }
+#quiz .sub { color: #9fd3b4; }
+.kicker { color: var(--gold); }
+#q-body input:focus, #q-body textarea:focus { outline: 2px solid var(--red-hi); outline-offset: 2px; border-color: transparent; }
+
+.chip.locate { border-color: rgba(63,166,107,.6); color: #9fd3b4; }
+.chip.locate:hover { border-color: var(--green-hi); color: #c6ecd5; }
+
+/* the two nights: a red bauble for Christmas, a gold one for New Year */
+.choice { position: relative; overflow: hidden; }
+.choice::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; }
+.choice.christmas::before { background: linear-gradient(90deg, var(--red-hi), var(--green-hi)); }
+.choice.newyear::before { background: linear-gradient(90deg, #c9973f, #fff1bf, #c9973f); }
+.bauble { position: relative; width: 30px; height: 30px; margin: 8px 0 4px; border-radius: 50%; }
+.bauble::before { content: ''; position: absolute; left: 11px; top: -6px; width: 8px; height: 6px; border-radius: 2px; background: var(--gold); }
+.choice.christmas .bauble { background: radial-gradient(circle at 35% 32%, #ff8a8a, var(--red-hi) 45%, #7a0718); box-shadow: 0 0 16px rgba(224,35,63,.45); }
+.choice.newyear .bauble { background: radial-gradient(circle at 35% 32%, #fff6d6, var(--gold) 45%, #8a6420); box-shadow: 0 0 16px rgba(232,192,99,.45); }
+.choice.christmas[aria-pressed="true"] { border-color: var(--red-hi); box-shadow: 0 0 0 1px var(--red-hi), 0 0 30px rgba(224,35,63,.3); }
+.choice.newyear[aria-pressed="true"] { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 30px rgba(232,192,99,.3); }

@@ -150,9 +150,13 @@ export function drawFinale(ctx, W, H, labels, t) {
   ctx.moveTo(W / 2 - 170, y); ctx.lineTo(W / 2 - 22, y);
   ctx.moveTo(W / 2 + 22, y); ctx.lineTo(W / 2 + 170, y);
   ctx.stroke();
-  ctx.fillStyle = GOLD;
-  ctx.font = '400 20px "Playfair Display"';
-  ctx.fillText('✦', W / 2, y + 7);
+  // three small baubles in the Christmas colours
+  [['#c8102e', -16], [GOLD, 0], ['#3fa66b', 16]].forEach(([c, dx]) => {
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(W / 2 + dx, y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
   y += 40;
   ctx.font = '600 21px Inter';
   ctx.fillStyle = GOLD;
